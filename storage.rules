@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Firmware binaries (legacy GeyserSwitch_Orange OTA) ──────────
+    // Public read so ESP32 can download updates without auth.
+    match /firmware/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // ── Profile pictures (legacy) ───────────────────────────────────
+    match /profile_pics/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // ── Telemetry data (gs_rework) ──────────────────────────────────
+    // Each user can only read/write their own telemetry folder.
+    match /telemetry/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // ── Deny everything else ────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

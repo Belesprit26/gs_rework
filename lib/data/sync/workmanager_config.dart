@@ -1,0 +1,119 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
+import 'package:workmanager/workmanager.dart';
+
+import '../../firebase_options.dart';
+import '../local/app_database.dart';
+import '../local/drift_notification_repository.dart';
+import '../local/drift_telemetry_repository.dart';
+import '../local/prefs_manager.dart';
+import 'cloud_storage_sync_repository.dart';
+import 'sync_orchestrator.dart';
+
+/// Unique task name for the daily telemetry sync.
+const String kDailySyncTaskName = 'gs_daily_telemetry_sync';
+
+/// Unique task identifier.
+const String kDailySyncTaskId = 'com.geyserswitch.dailySync';
+
+/// Initialize workmanager and register the periodic sync task.
+///
+/// Call once from main.dart.
+Future<void> initializeWorkmanager() async {
+  await Workmanager().initialize(
+    _callbackDispatcher,
+    isInDebugMode: kDebugMode,
+  );
+
+  // Register a daily periodic task.
+  // On Android this uses WorkManager's PeriodicWorkRequest.
+  // On iOS it uses BGTaskScheduler.
+  // `frequency` = minimum interval (OS may delay further).
+  await Workmanager().registerPeriodicTask(
+    kDailySyncTaskId,
+    kDailySyncTaskName,
+    frequency: const Duration(hours: 24),
+    initialDelay: _durationUntilMidnight(),
+    constraints: Constraints(
+      networkType: NetworkType.connected, // Require any network
+    ),
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+    backoffPolicy: BackoffPolicy.exponential,
+    backoffPolicyDelay: const Duration(minutes: 15),
+  );
+
+  if (kDebugMode) {
+    debugPrint('[Workmanager] Registered daily sync task, '
+        'first run in ${_durationUntilMidnight().inMinutes} minutes');
+  }
+}
+
+/// Calculate delay until 23:55 local time (today or tomorrow).
+Duration _durationUntilMidnight() {
+  final now = DateTime.now();
+  var target = DateTime(now.year, now.month, now.day, 23, 55);
+
+  // If 23:55 has already passed today, schedule for tomorrow.
+  if (target.isBefore(now)) {
+    target = target.add(const Duration(days: 1));
+  }
+
+  return target.difference(now);
+}
+
+/// Top-level function — workmanager callback dispatcher.
+///
+/// Runs in a separate isolate. Must be a top-level or static function.
+/// We set up minimal dependencies here (no full DI — just what's needed).
+@pragma('vm:entry-point')
+void _callbackDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    try {
+      if (taskName != kDailySyncTaskName) return true;
+
+      // Initialize Firebase in the background isolate.
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+
+      // Create minimal dependencies for sync.
+      final db = AppDatabase();
+      final telemetryRepo = DriftTelemetryRepository(db: db);
+      final notificationRepo = DriftNotificationRepository(db: db);
+      final prefsManager = await PrefsManager.create();
+
+      final syncRepo = CloudStorageSyncRepository(
+        storage: FirebaseStorage.instance,
+        auth: FirebaseAuth.instance,
+        telemetryRepository: telemetryRepo,
+        notificationRepository: notificationRepo,
+      );
+
+      // Prune old records while we're at it (both tables).
+      await telemetryRepo.pruneOlderThan(retentionDays: 7);
+      await notificationRepo.pruneOlderThan(retentionDays: 7);
+
+      final success = await SyncOrchestrator.executeBackgroundSync(
+        syncRepository: syncRepo,
+        prefsManager: prefsManager,
+      );
+
+      // Close the database.
+      await db.close();
+
+      if (kDebugMode) {
+        debugPrint('[Workmanager] Daily sync '
+            '${success ? 'succeeded' : 'needs retry'}');
+      }
+
+      return success;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Workmanager] Task failed: $e');
+      }
+      return false; // Workmanager will retry with backoff.
+    }
+  });
+}

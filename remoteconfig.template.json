@@ -1,0 +1,18 @@
+{
+  "parameters": {
+    "maintenance_mode": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN",
+      "description": "When true, the app shows a maintenance screen and blocks normal use."
+    },
+    "min_supported_version": {
+      "defaultValue": {
+        "value": "1.0.0"
+      },
+      "valueType": "STRING",
+      "description": "Minimum app version allowed. Older versions see a force-upgrade screen."
+    }
+  }
+}

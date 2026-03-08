@@ -1,0 +1,87 @@
+{
+  "rules": {
+
+    "firmware": {
+      ".read": "auth !== null"
+    },
+
+    "Orange": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+
+    "GeyserSwitch": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && auth.uid === $uid",
+
+        "ServiceInfo": {
+          ".read": "auth !== null",
+          ".write": "auth !== null"
+        }
+      }
+    },
+
+    "gs": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+
+        "live": {
+          "$did": {
+            ".validate": "newData.hasChildren(['t','on','at'])",
+            "t":  { ".validate": "newData.isNumber()" },
+            "on": { ".validate": "newData.isBoolean()" },
+            "at": { ".validate": "newData.val() === now" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "set": {
+          "$did": {
+            "on":    { ".validate": "newData.isBoolean()" },
+            "max":   { ".validate": "newData.isNumber() && newData.val() >= 30 && newData.val() <= 75" },
+            "min":   { ".validate": "newData.isNumber() && newData.val() >= 10 && newData.val() <= 50" },
+            "ar":    { ".validate": "newData.isBoolean()" },
+            "tmask": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 31" },
+            "tcust": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1439" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "events": {
+          "$did": {
+            ".validate": "newData.hasChildren(['type','temp','at'])",
+            "type":    { ".validate": "newData.isNumber()" },
+            "temp":    { ".validate": "newData.isNumber()" },
+            "at":      { ".validate": "newData.val() === now" },
+            "$other":  { ".validate": false }
+          }
+        },
+
+        "stats": {
+          "$did": {
+            "$date": {
+              ".validate": "$date.matches(/^\\d{4}-\\d{2}-\\d{2}$/)",
+              "rt": { ".validate": "newData.isNumber()" },
+              "cy": { ".validate": "newData.isNumber()" },
+              "$other": { ".validate": false }
+            }
+          }
+        },
+
+        "meta": {
+          "boot":            { ".validate": "newData.isNumber()" },
+          "app":             { ".validate": "newData.val() === now" },
+          "offlineNotified": { ".validate": "newData.isBoolean()" },
+          "$other":          { ".validate": false }
+        },
+
+        "$other": { ".validate": false }
+      }
+    },
+
+    ".read": false,
+    ".write": false
+  }
+}

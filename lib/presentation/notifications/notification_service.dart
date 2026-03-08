@@ -1,0 +1,286 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../core/ble/gatt_uuids.dart';
+import '../../data/local/prefs_manager.dart';
+import '../../domain/ble/ble_connection_status.dart';
+import '../../domain/ble/repositories/ble_repository.dart';
+import '../../domain/notifications/entities/device_notification.dart';
+import '../../domain/notifications/repositories/notification_repository.dart';
+import '../../domain/telemetry/entities/telemetry_record.dart';
+import '../../domain/telemetry/repositories/telemetry_repository.dart';
+
+/// Background service that manages device events and notifications.
+///
+/// Lifecycle:
+/// 1. On BLE `ready`: reads buffered events + telemetry from the ESP,
+///    creates local DB records, acknowledges (clears ESP buffers),
+///    then subscribes to real-time event notifications.
+/// 2. On real-time event: creates a [DeviceNotification] record.
+/// 3. Exposes [unreadCount] stream for the badge in the app bar.
+/// 4. On BLE disconnect: unsubscribes from event notifications.
+///
+/// Notification preferences (per-type muting) control:
+/// - Whether a notification appears in the list view
+/// - Whether it counts toward the unread badge
+/// - The notification is always stored and synced regardless.
+class NotificationService {
+  NotificationService({
+    required BleRepository bleRepository,
+    required NotificationRepository notificationRepository,
+    required TelemetryRepository telemetryRepository,
+    required PrefsManager prefsManager,
+  })  : _ble = bleRepository,
+        _notifications = notificationRepository,
+        _telemetry = telemetryRepository,
+        _prefs = prefsManager;
+
+  final BleRepository _ble;
+  final NotificationRepository _notifications;
+  final TelemetryRepository _telemetry;
+  final PrefsManager _prefs;
+
+  StreamSubscription<BleConnectionStatus>? _bleSub;
+  StreamSubscription<Uint8List>? _eventSub;
+
+  final _unreadCountController = StreamController<int>.broadcast();
+
+  /// Stream of unread notification count (for badge UI).
+  Stream<int> get unreadCount => _unreadCountController.stream;
+
+  int _lastUnreadCount = 0;
+
+  /// Current unread count (synchronous access).
+  int get currentUnreadCount => _lastUnreadCount;
+
+  // ── Public API ────────────────────────────────────────────────────
+
+  /// Start monitoring BLE status and handling events.
+  /// Call once after DI setup.
+  void start() {
+    _bleSub = _ble.connectionStatus.listen(_onBleStatusChanged);
+
+    // If already connected at start time, sync immediately.
+    if (_ble.currentStatus == BleConnectionStatus.ready) {
+      _syncBuffersAndSubscribe();
+    }
+  }
+
+  /// Stop all monitoring and clean up.
+  Future<void> stop() async {
+    await _eventSub?.cancel();
+    _eventSub = null;
+    await _bleSub?.cancel();
+    _bleSub = null;
+    await _unreadCountController.close();
+  }
+
+  /// Refresh the unread count (call after dismissing or changing prefs).
+  Future<void> refreshUnreadCount() async {
+    final deviceId = _ble.connectedDeviceId;
+    if (deviceId == null) return;
+
+    final count = await _notifications.countUndismissed(
+      deviceId,
+      enabledTypes: _prefs.enabledNotificationTypes,
+    );
+    _lastUnreadCount = count;
+    if (!_unreadCountController.isClosed) {
+      _unreadCountController.add(count);
+    }
+  }
+
+  // ── Private ───────────────────────────────────────────────────────
+
+  void _onBleStatusChanged(BleConnectionStatus status) {
+    if (status == BleConnectionStatus.ready) {
+      _syncBuffersAndSubscribe();
+    } else if (status == BleConnectionStatus.disconnected ||
+        status == BleConnectionStatus.reconnecting) {
+      _eventSub?.cancel();
+      _eventSub = null;
+    }
+  }
+
+  /// Full reconnect flow: read buffers → create records → ack → subscribe.
+  Future<void> _syncBuffersAndSubscribe() async {
+    try {
+      // 1. Read buffered events from ESP.
+      await _syncEventBuffer();
+
+      // 2. Read buffered telemetry from ESP.
+      await _syncTelemetryBuffer();
+
+      // 3. Acknowledge — clears both buffers on the ESP.
+      await _ackBuffers();
+
+      // 4. Subscribe to real-time event notifications.
+      _subscribeToEvents();
+
+      // 5. Refresh badge count.
+      await refreshUnreadCount();
+
+      // 6. Prune old notifications (7-day retention).
+      await _notifications.pruneOlderThan(retentionDays: 7);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NotificationService] Buffer sync failed: $e');
+      }
+    }
+  }
+
+  /// Read the event buffer characteristic and insert records.
+  Future<void> _syncEventBuffer() async {
+    try {
+      final bytes = await _ble.readCharacteristic(
+        GattUuids.deviceEvents.str,
+      );
+      if (bytes.isEmpty) return;
+
+      final deviceId = _ble.connectedDeviceId;
+      if (deviceId == null) return;
+
+      final notifications = <DeviceNotification>[];
+
+      // Each event: 6 bytes [type, temp, ts0, ts1, ts2, ts3].
+      for (var i = 0; i + 5 < bytes.length; i += 6) {
+        final type = bytes[i];
+        final temp = bytes[i + 1];
+        final ts = bytes[i + 2] |
+            (bytes[i + 3] << 8) |
+            (bytes[i + 4] << 16) |
+            (bytes[i + 5] << 24);
+
+        notifications.add(DeviceNotification(
+          deviceId: deviceId,
+          type: NotificationType.fromCode(type),
+          temperature: temp,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            ts * 1000,
+            isUtc: true,
+          ),
+        ));
+      }
+
+      if (notifications.isNotEmpty) {
+        await _notifications.insertBatch(notifications);
+        if (kDebugMode) {
+          debugPrint('[NotificationService] Synced '
+              '${notifications.length} buffered events');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NotificationService] Event buffer read failed: $e');
+      }
+    }
+  }
+
+  /// Read the telemetry buffer characteristic and insert records.
+  Future<void> _syncTelemetryBuffer() async {
+    try {
+      final bytes = await _ble.readCharacteristic(
+        GattUuids.telemetryBuffer.str,
+      );
+      if (bytes.isEmpty) return;
+
+      final deviceId = _ble.connectedDeviceId;
+      if (deviceId == null) return;
+
+      final records = <TelemetryRecord>[];
+
+      // Each entry: 10 bytes
+      // [temp_i16_le(2), relay(1), min(1), max(1), auto_reheat(1), ts_u32_le(4)]
+      for (var i = 0; i + 9 < bytes.length; i += 10) {
+        final bd = ByteData.sublistView(bytes, i, i + 10);
+        final tempRaw = bd.getInt16(0, Endian.little);
+        final relayOn = bytes[i + 2] == 1;
+        final minTemp = bytes[i + 3];
+        final maxTemp = bytes[i + 4];
+        // bytes[i + 5] = auto_reheat (not stored in TelemetryRecord)
+        final ts = bd.getUint32(6, Endian.little);
+
+        records.add(TelemetryRecord(
+          deviceId: deviceId,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            ts * 1000,
+            isUtc: true,
+          ),
+          temperature: tempRaw / 100.0,
+          isOn: relayOn,
+          minTemp: minTemp,
+          maxTemp: maxTemp,
+        ));
+      }
+
+      if (records.isNotEmpty) {
+        await _telemetry.insertBatch(records);
+        if (kDebugMode) {
+          debugPrint('[NotificationService] Synced '
+              '${records.length} buffered telemetry entries');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NotificationService] Telemetry buffer read failed: $e');
+      }
+    }
+  }
+
+  /// Write ack to clear both buffers on the ESP.
+  Future<void> _ackBuffers() async {
+    try {
+      await _ble.writeCharacteristic(
+        GattUuids.bufferAck.str,
+        Uint8List.fromList([0x01]),
+      );
+      if (kDebugMode) {
+        debugPrint('[NotificationService] Buffer acknowledge sent');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NotificationService] Buffer ack failed: $e');
+      }
+    }
+  }
+
+  /// Subscribe to real-time event notifications via BLE.
+  void _subscribeToEvents() {
+    _eventSub?.cancel();
+    _eventSub = _ble.subscribe(GattUuids.deviceEvents.str).listen(
+      (bytes) {
+        if (bytes.length < 2) return;
+
+        final deviceId = _ble.connectedDeviceId;
+        if (deviceId == null) return;
+
+        final type = NotificationType.fromCode(bytes[0]);
+        final temp = bytes[1];
+
+        final notification = DeviceNotification(
+          deviceId: deviceId,
+          type: type,
+          temperature: temp,
+          timestamp: DateTime.now().toUtc(),
+        );
+
+        // Always store, regardless of mute preferences.
+        _notifications.insert(notification).then((_) {
+          // Only increment badge if this type is enabled.
+          if (_prefs.isNotificationTypeEnabled(type)) {
+            _lastUnreadCount++;
+            if (!_unreadCountController.isClosed) {
+              _unreadCountController.add(_lastUnreadCount);
+            }
+          }
+
+          if (kDebugMode) {
+            debugPrint('[NotificationService] Real-time event: '
+                '${type.label} @ $temp°C');
+          }
+        });
+      },
+    );
+  }
+}

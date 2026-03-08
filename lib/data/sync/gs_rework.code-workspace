@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../GeyserSwitch_Orange"
+		},
+		{
+			"path": "../../../../gs_firmware"
+		}
+	],
+	"settings": {}
+}
