@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/ble/gatt_uuids.dart';
@@ -18,27 +20,42 @@ part 'ble_connection_state.dart';
 ///
 /// Persists the paired device ID via [PrefsManager] so that the app
 /// auto-connects on next launch without the user needing to re-scan.
-class BleConnectionCubit extends Cubit<BleConnectionState> {
+///
+/// Also monitors app lifecycle and WiFi connectivity to automatically
+/// re-acquire BLE when the user returns home.
+class BleConnectionCubit extends Cubit<BleConnectionState>
+    with WidgetsBindingObserver {
   BleConnectionCubit({
     required BleRepository bleRepository,
     required PrefsManager prefsManager,
+    Connectivity? connectivity,
   })  : _ble = bleRepository,
         _prefs = prefsManager,
+        _connectivity = connectivity ?? Connectivity(),
         super(BleConnectionState(
           isBluetoothOn: bleRepository.isAdapterOn,
         )) {
     _statusSub = _ble.connectionStatus.listen(_onStatusChanged);
     _adapterSub = _ble.adapterState.listen(_onAdapterStateChanged);
+    WidgetsBinding.instance.addObserver(this);
+    _connectivitySub =
+        _connectivity.onConnectivityChanged.listen(_onConnectivityChanged);
   }
 
   final BleRepository _ble;
   final PrefsManager _prefs;
+  final Connectivity _connectivity;
   StreamSubscription<BleConnectionStatus>? _statusSub;
   StreamSubscription<bool>? _adapterSub;
   StreamSubscription<List<ScannedDevice>>? _scanSub;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   /// Whether a scan was requested while BT was off (to auto-start later).
   bool _pendingScan = false;
+
+  /// Debounce for probe reconnect attempts.
+  DateTime? _lastProbeTime;
+  static const _probeDebounce = Duration(seconds: 30);
 
   // ── Public API ────────────────────────────────────────────────────
 
@@ -148,6 +165,38 @@ class BleConnectionCubit extends Cubit<BleConnectionState> {
     await _readDeviceInfo();
   }
 
+  // ── BLE re-acquisition ─────────────────────────────────────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.resumed) {
+      _probeReconnect('app resumed');
+    }
+  }
+
+  void _onConnectivityChanged(List<ConnectivityResult> results) {
+    if (results.contains(ConnectivityResult.wifi)) {
+      _probeReconnect('WiFi joined');
+    }
+  }
+
+  /// Attempt BLE reconnection if paired, disconnected, idle, and
+  /// not probed too recently.
+  void _probeReconnect(String reason) {
+    if (!state.isPaired || state.isConnected || state.isBusy) return;
+    if (!state.isBluetoothOn) return;
+
+    final now = DateTime.now();
+    if (_lastProbeTime != null &&
+        now.difference(_lastProbeTime!) < _probeDebounce) {
+      return;
+    }
+    _lastProbeTime = now;
+
+    debugPrint('[BLE] Probing reconnect ($reason)');
+    reconnect();
+  }
+
   // ── Private ───────────────────────────────────────────────────────
 
   void _onAdapterStateChanged(bool isOn) {
@@ -224,6 +273,8 @@ class BleConnectionCubit extends Cubit<BleConnectionState> {
 
   @override
   Future<void> close() async {
+    WidgetsBinding.instance.removeObserver(this);
+    await _connectivitySub?.cancel();
     await _scanSub?.cancel();
     await _statusSub?.cancel();
     await _adapterSub?.cancel();
