@@ -60,6 +60,7 @@ abstract final class NdjsonCodec {
         'ts': r.timestamp.toIso8601String(),
         'tp': r.type.code,
         'tmp': r.temperature,
+        'src': r.source == NotificationSource.remote ? 'remote' : 'ble',
       };
       buffer.writeln(jsonEncode(map));
     }

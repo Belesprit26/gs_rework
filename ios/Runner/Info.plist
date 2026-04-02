@@ -53,6 +53,7 @@
 	<array>
 		<string>fetch</string>
 		<string>processing</string>
+		<string>remote-notification</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>GeyserSwitch uses Bluetooth to communicate with your geyser controller.</string>

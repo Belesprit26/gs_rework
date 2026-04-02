@@ -6,13 +6,12 @@ import '../../data/local/prefs_manager.dart';
 import '../../domain/notifications/entities/device_notification.dart';
 import '../../domain/notifications/repositories/notification_repository.dart';
 import '../ble/ble_connection_cubit.dart';
-import 'notification_service.dart';
 
 /// Full-page view for browsing device notifications.
 ///
-/// Shows undismissed notifications filtered by the user's enabled types.
-/// Swipe-to-dismiss marks a notification as dismissed (UI-only removal).
-/// Records are still stored and synced; they auto-delete after 7 days.
+/// Shows all notifications (BLE and remote). Muted types appear
+/// with subdued styling. Notifications are not dismissible — they
+/// stack up permanently and auto-delete after 7 days.
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
@@ -44,19 +43,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       return;
     }
 
-    final items = await _repo.getUndismissed(
-      deviceId,
-      enabledTypes: _prefs.enabledNotificationTypes,
-    );
+    final items = await _repo.getUndismissed(deviceId);
     if (mounted) setState(() { _notifications = items; _loading = false; });
-  }
-
-  Future<void> _dismiss(DeviceNotification n) async {
-    if (n.id == null) return;
-    await _repo.markDismissed(n.id!);
-    setState(() => _notifications.removeWhere((x) => x.id == n.id));
-    // Refresh the service's unread count.
-    getIt<NotificationService>().refreshUnreadCount();
   }
 
   @override
@@ -92,9 +80,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   itemCount: _notifications.length,
                   itemBuilder: (ctx, i) {
                     final n = _notifications[i];
+                    final isMuted = !_prefs.isNotificationTypeEnabled(n.type);
                     return _NotificationTile(
                       notification: n,
-                      onDismiss: () => _dismiss(n),
+                      isMuted: isMuted,
                     );
                   },
                 ),
@@ -107,35 +96,50 @@ class _NotificationsPageState extends State<NotificationsPage> {
 class _NotificationTile extends StatelessWidget {
   const _NotificationTile({
     required this.notification,
-    required this.onDismiss,
+    required this.isMuted,
   });
 
   final DeviceNotification notification;
-  final VoidCallback onDismiss;
+  final bool isMuted;
 
   @override
   Widget build(BuildContext context) {
-    final color = _colorForType(notification.type);
+    final color = isMuted ? Colors.grey : _colorForType(notification.type);
     final time = _formatTime(notification.timestamp.toLocal());
+    final isRemote = notification.source == NotificationSource.remote;
 
-    return Dismissible(
-      key: ValueKey(notification.id),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => onDismiss(),
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: Colors.red.shade100,
-        child: const Icon(Icons.delete_outline, color: Colors.red),
-      ),
+    return Opacity(
+      opacity: isMuted ? 0.5 : 1.0,
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: color.withValues(alpha: 0.15),
-          child: Icon(_iconForType(notification.type), color: color, size: 20),
+          child: Icon(
+            _iconForType(notification.type),
+            color: color,
+            size: 20,
+          ),
         ),
-        title: Text(
-          notification.title,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                notification.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            Icon(
+              isRemote ? Icons.wifi : Icons.bluetooth,
+              size: 14,
+              color: isMuted
+                  ? Colors.grey.shade400
+                  : isRemote
+                      ? Colors.green.shade400
+                      : Colors.blue.shade400,
+            ),
+          ],
         ),
         subtitle: Text(
           notification.body,
@@ -157,6 +161,8 @@ class _NotificationTile extends StatelessWidget {
         return Colors.green;
       case NotificationType.minTempAlert:
         return Colors.orange;
+      case NotificationType.unknown:
+        return Colors.grey;
     }
   }
 
@@ -168,6 +174,8 @@ class _NotificationTile extends StatelessWidget {
         return Icons.local_fire_department;
       case NotificationType.minTempAlert:
         return Icons.warning_amber_rounded;
+      case NotificationType.unknown:
+        return Icons.help_outline;
     }
   }
 

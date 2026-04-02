@@ -47,22 +47,13 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
-  Future<List<DeviceNotification>> getUndismissed(
-    String deviceId, {
-    Set<NotificationType>? enabledTypes,
-  }) async {
+  Future<List<DeviceNotification>> getUndismissed(String deviceId) async {
     final query = _db.select(_db.notificationEntries)
       ..where(
         (t) => t.deviceId.equals(deviceId) & t.dismissed.equals(false),
-      );
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]);
 
-    if (enabledTypes != null && enabledTypes.isNotEmpty) {
-      query.where(
-        (t) => t.type.isIn(enabledTypes.map((e) => e.code).toList()),
-      );
-    }
-
-    query.orderBy([(t) => OrderingTerm.desc(t.timestamp)]);
     final rows = await query.get();
     return rows.map(_fromEntry).toList();
   }
@@ -90,6 +81,32 @@ class DriftNotificationRepository implements NotificationRepository {
 
     final result = await query.getSingle();
     return result.read(countExpr) ?? 0;
+  }
+
+  @override
+  Future<bool> hasMatchingEvent({
+    required String deviceId,
+    required NotificationType type,
+    required DateTime timestamp,
+    Duration window = const Duration(minutes: 2),
+  }) async {
+    final lower = timestamp.subtract(window);
+    final upper = timestamp.add(window);
+
+    final countExpr = _db.notificationEntries.id.count();
+    final query = _db.selectOnly(_db.notificationEntries)
+      ..addColumns([countExpr])
+      ..where(
+        _db.notificationEntries.deviceId.equals(deviceId) &
+            _db.notificationEntries.type.equals(type.code) &
+            _db.notificationEntries.timestamp
+                .isBiggerOrEqualValue(lower) &
+            _db.notificationEntries.timestamp
+                .isSmallerOrEqualValue(upper),
+      );
+
+    final result = await query.getSingle();
+    return (result.read(countExpr) ?? 0) > 0;
   }
 
   @override
@@ -151,6 +168,7 @@ class DriftNotificationRepository implements NotificationRepository {
       timestamp: n.timestamp,
       dismissed: Value(n.dismissed),
       synced: Value(n.synced),
+      source: Value(n.source == NotificationSource.remote ? 'remote' : 'ble'),
     );
   }
 
@@ -163,6 +181,8 @@ class DriftNotificationRepository implements NotificationRepository {
       timestamp: e.timestamp,
       dismissed: e.dismissed,
       synced: e.synced,
+      source:
+          e.source == 'remote' ? NotificationSource.remote : NotificationSource.ble,
     );
   }
 }

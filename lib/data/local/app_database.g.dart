@@ -615,6 +615,16 @@ class $NotificationEntriesTable extends NotificationEntries
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('ble'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -624,6 +634,7 @@ class $NotificationEntriesTable extends NotificationEntries
     timestamp,
     dismissed,
     synced,
+    source,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -687,6 +698,12 @@ class $NotificationEntriesTable extends NotificationEntries
         synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta),
       );
     }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
     return context;
   }
 
@@ -731,6 +748,11 @@ class $NotificationEntriesTable extends NotificationEntries
             DriftSqlType.bool,
             data['${effectivePrefix}synced'],
           )!,
+      source:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}source'],
+          )!,
     );
   }
 
@@ -762,6 +784,9 @@ class NotificationEntry extends DataClass
 
   /// Whether this record has been pushed to cloud storage.
   final bool synced;
+
+  /// Delivery source: 'ble' or 'remote'.
+  final String source;
   const NotificationEntry({
     required this.id,
     required this.deviceId,
@@ -770,6 +795,7 @@ class NotificationEntry extends DataClass
     required this.timestamp,
     required this.dismissed,
     required this.synced,
+    required this.source,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -781,6 +807,7 @@ class NotificationEntry extends DataClass
     map['timestamp'] = Variable<DateTime>(timestamp);
     map['dismissed'] = Variable<bool>(dismissed);
     map['synced'] = Variable<bool>(synced);
+    map['source'] = Variable<String>(source);
     return map;
   }
 
@@ -793,6 +820,7 @@ class NotificationEntry extends DataClass
       timestamp: Value(timestamp),
       dismissed: Value(dismissed),
       synced: Value(synced),
+      source: Value(source),
     );
   }
 
@@ -809,6 +837,7 @@ class NotificationEntry extends DataClass
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
       dismissed: serializer.fromJson<bool>(json['dismissed']),
       synced: serializer.fromJson<bool>(json['synced']),
+      source: serializer.fromJson<String>(json['source']),
     );
   }
   @override
@@ -822,6 +851,7 @@ class NotificationEntry extends DataClass
       'timestamp': serializer.toJson<DateTime>(timestamp),
       'dismissed': serializer.toJson<bool>(dismissed),
       'synced': serializer.toJson<bool>(synced),
+      'source': serializer.toJson<String>(source),
     };
   }
 
@@ -833,6 +863,7 @@ class NotificationEntry extends DataClass
     DateTime? timestamp,
     bool? dismissed,
     bool? synced,
+    String? source,
   }) => NotificationEntry(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
@@ -841,6 +872,7 @@ class NotificationEntry extends DataClass
     timestamp: timestamp ?? this.timestamp,
     dismissed: dismissed ?? this.dismissed,
     synced: synced ?? this.synced,
+    source: source ?? this.source,
   );
   NotificationEntry copyWithCompanion(NotificationEntriesCompanion data) {
     return NotificationEntry(
@@ -852,6 +884,7 @@ class NotificationEntry extends DataClass
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
       dismissed: data.dismissed.present ? data.dismissed.value : this.dismissed,
       synced: data.synced.present ? data.synced.value : this.synced,
+      source: data.source.present ? data.source.value : this.source,
     );
   }
 
@@ -864,7 +897,8 @@ class NotificationEntry extends DataClass
           ..write('temperature: $temperature, ')
           ..write('timestamp: $timestamp, ')
           ..write('dismissed: $dismissed, ')
-          ..write('synced: $synced')
+          ..write('synced: $synced, ')
+          ..write('source: $source')
           ..write(')'))
         .toString();
   }
@@ -878,6 +912,7 @@ class NotificationEntry extends DataClass
     timestamp,
     dismissed,
     synced,
+    source,
   );
   @override
   bool operator ==(Object other) =>
@@ -889,7 +924,8 @@ class NotificationEntry extends DataClass
           other.temperature == this.temperature &&
           other.timestamp == this.timestamp &&
           other.dismissed == this.dismissed &&
-          other.synced == this.synced);
+          other.synced == this.synced &&
+          other.source == this.source);
 }
 
 class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
@@ -900,6 +936,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
   final Value<DateTime> timestamp;
   final Value<bool> dismissed;
   final Value<bool> synced;
+  final Value<String> source;
   const NotificationEntriesCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -908,6 +945,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     this.timestamp = const Value.absent(),
     this.dismissed = const Value.absent(),
     this.synced = const Value.absent(),
+    this.source = const Value.absent(),
   });
   NotificationEntriesCompanion.insert({
     this.id = const Value.absent(),
@@ -917,6 +955,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     required DateTime timestamp,
     this.dismissed = const Value.absent(),
     this.synced = const Value.absent(),
+    this.source = const Value.absent(),
   }) : deviceId = Value(deviceId),
        type = Value(type),
        temperature = Value(temperature),
@@ -929,6 +968,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     Expression<DateTime>? timestamp,
     Expression<bool>? dismissed,
     Expression<bool>? synced,
+    Expression<String>? source,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -938,6 +978,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
       if (timestamp != null) 'timestamp': timestamp,
       if (dismissed != null) 'dismissed': dismissed,
       if (synced != null) 'synced': synced,
+      if (source != null) 'source': source,
     });
   }
 
@@ -949,6 +990,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     Value<DateTime>? timestamp,
     Value<bool>? dismissed,
     Value<bool>? synced,
+    Value<String>? source,
   }) {
     return NotificationEntriesCompanion(
       id: id ?? this.id,
@@ -958,6 +1000,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
       timestamp: timestamp ?? this.timestamp,
       dismissed: dismissed ?? this.dismissed,
       synced: synced ?? this.synced,
+      source: source ?? this.source,
     );
   }
 
@@ -985,6 +1028,9 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     if (synced.present) {
       map['synced'] = Variable<bool>(synced.value);
     }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
     return map;
   }
 
@@ -997,7 +1043,8 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
           ..write('temperature: $temperature, ')
           ..write('timestamp: $timestamp, ')
           ..write('dismissed: $dismissed, ')
-          ..write('synced: $synced')
+          ..write('synced: $synced, ')
+          ..write('source: $source')
           ..write(')'))
         .toString();
   }
@@ -1303,6 +1350,7 @@ typedef $$NotificationEntriesTableCreateCompanionBuilder =
       required DateTime timestamp,
       Value<bool> dismissed,
       Value<bool> synced,
+      Value<String> source,
     });
 typedef $$NotificationEntriesTableUpdateCompanionBuilder =
     NotificationEntriesCompanion Function({
@@ -1313,6 +1361,7 @@ typedef $$NotificationEntriesTableUpdateCompanionBuilder =
       Value<DateTime> timestamp,
       Value<bool> dismissed,
       Value<bool> synced,
+      Value<String> source,
     });
 
 class $$NotificationEntriesTableFilterComposer
@@ -1356,6 +1405,11 @@ class $$NotificationEntriesTableFilterComposer
 
   ColumnFilters<bool> get synced => $composableBuilder(
     column: $table.synced,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1403,6 +1457,11 @@ class $$NotificationEntriesTableOrderingComposer
     column: $table.synced,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotificationEntriesTableAnnotationComposer
@@ -1436,6 +1495,9 @@ class $$NotificationEntriesTableAnnotationComposer
 
   GeneratedColumn<bool> get synced =>
       $composableBuilder(column: $table.synced, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
 }
 
 class $$NotificationEntriesTableTableManager
@@ -1491,6 +1553,7 @@ class $$NotificationEntriesTableTableManager
                 Value<DateTime> timestamp = const Value.absent(),
                 Value<bool> dismissed = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
+                Value<String> source = const Value.absent(),
               }) => NotificationEntriesCompanion(
                 id: id,
                 deviceId: deviceId,
@@ -1499,6 +1562,7 @@ class $$NotificationEntriesTableTableManager
                 timestamp: timestamp,
                 dismissed: dismissed,
                 synced: synced,
+                source: source,
               ),
           createCompanionCallback:
               ({
@@ -1509,6 +1573,7 @@ class $$NotificationEntriesTableTableManager
                 required DateTime timestamp,
                 Value<bool> dismissed = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
+                Value<String> source = const Value.absent(),
               }) => NotificationEntriesCompanion.insert(
                 id: id,
                 deviceId: deviceId,
@@ -1517,6 +1582,7 @@ class $$NotificationEntriesTableTableManager
                 timestamp: timestamp,
                 dismissed: dismissed,
                 synced: synced,
+                source: source,
               ),
           withReferenceMapper:
               (p0) =>

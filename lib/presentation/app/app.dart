@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/firebase/fcm/push_notification_manager.dart';
 import '../../di/locator.dart';
 import '../auth/auth_gate/auth_gate_view.dart';
 import '../ble/ble_connection_cubit.dart';
@@ -20,7 +21,10 @@ class App extends StatelessWidget {
           value: getIt<GeyserControlCubit>(),
         ),
       ],
-      child: const MaterialApp(home: AuthGateView()),
+      child: MaterialApp(
+        navigatorKey: PushNotificationManager.navigatorKey,
+        home: const AuthGateView(),
+      ),
     );
   }
 }

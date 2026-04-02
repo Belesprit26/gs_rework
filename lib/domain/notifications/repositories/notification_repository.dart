@@ -14,17 +14,23 @@ abstract class NotificationRepository {
   /// All notifications for a device, newest first.
   Future<List<DeviceNotification>> getAll(String deviceId, {int? limit});
 
-  /// Undismissed notifications filtered to [enabledTypes] only.
-  /// If [enabledTypes] is null, returns all undismissed.
-  Future<List<DeviceNotification>> getUndismissed(
-    String deviceId, {
-    Set<NotificationType>? enabledTypes,
-  });
+  /// All non-dismissed notifications, newest first.
+  /// Unlike the old version this returns ALL types (muting is a UI concern).
+  Future<List<DeviceNotification>> getUndismissed(String deviceId);
 
   /// Count undismissed notifications for badge, filtered to [enabledTypes].
   Future<int> countUndismissed(
     String deviceId, {
     Set<NotificationType>? enabledTypes,
+  });
+
+  /// Check if a matching event already exists (for FCM dedup).
+  /// Matches on [deviceId], [type], and timestamp within [window].
+  Future<bool> hasMatchingEvent({
+    required String deviceId,
+    required NotificationType type,
+    required DateTime timestamp,
+    Duration window = const Duration(minutes: 2),
   });
 
   /// Get unsynced notifications for cloud push.

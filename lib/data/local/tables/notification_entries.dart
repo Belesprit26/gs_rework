@@ -26,4 +26,8 @@ class NotificationEntries extends Table {
   /// Whether this record has been pushed to cloud storage.
   BoolColumn get synced =>
       boolean().withDefault(const Constant(false))();
+
+  /// Delivery source: 'ble' or 'remote'.
+  TextColumn get source =>
+      text().withDefault(const Constant('ble'))();
 }

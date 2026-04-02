@@ -263,6 +263,7 @@ class NotificationService {
           type: type,
           temperature: temp,
           timestamp: DateTime.now().toUtc(),
+          source: NotificationSource.ble,
         );
 
         // Always store, regardless of mute preferences.

@@ -189,12 +189,13 @@ exports.checkDeviceOffline = onSchedule("every 5 minutes", async (event) => {
     const live = liveSnap.val();
     if (!live) continue;
 
-    const metaSnap = await db.ref(`gs/${uid}/meta/offlineNotified`).once("value");
-    const alreadyNotified = metaSnap.val() === true;
-
     for (const did of Object.keys(live)) {
       const lastSeen = live[did]?.at;
       if (!lastSeen) continue;
+
+      const flagRef = db.ref(`gs/${uid}/meta/offlineNotified/${did}`);
+      const flagSnap = await flagRef.once("value");
+      const alreadyNotified = flagSnap.val() === true;
 
       const isOffline = (now - lastSeen) > THRESHOLD;
 
@@ -205,7 +206,7 @@ exports.checkDeviceOffline = onSchedule("every 5 minutes", async (event) => {
           body: `Your geyser hasn't reported in ${ago} minutes`,
           data: { type: "device_offline", deviceId: did },
         });
-        await db.ref(`gs/${uid}/meta/offlineNotified`).set(true);
+        await flagRef.set(true);
         console.log(`checkDeviceOffline: uid=${uid} did=${did} offline ${ago}m`);
       } else if (!isOffline && alreadyNotified) {
         await sendPushToAllTokens(uid, {
@@ -213,7 +214,7 @@ exports.checkDeviceOffline = onSchedule("every 5 minutes", async (event) => {
           body: "Your geyser is reporting again",
           data: { type: "device_online", deviceId: did },
         });
-        await db.ref(`gs/${uid}/meta/offlineNotified`).remove();
+        await flagRef.remove();
         console.log(`checkDeviceOffline: uid=${uid} did=${did} back online`);
       }
     }

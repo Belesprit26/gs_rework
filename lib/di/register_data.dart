@@ -30,6 +30,7 @@ import '../domain/notifications/repositories/notification_repository.dart';
 import '../domain/remote_config/repositories/remote_config_repository.dart';
 import '../domain/telemetry/repositories/telemetry_repository.dart';
 import '../domain/telemetry/repositories/telemetry_sync_repository.dart';
+import '../presentation/notifications/notification_service.dart';
 
 /// Set to true to use the mock BLE repo (no hardware needed).
 const bool _useMockBle = false;
@@ -139,6 +140,9 @@ Future<void> registerData(GetIt getIt) async {
     () => PushNotificationManager(
       messaging: getIt<FirebaseMessaging>(),
       functions: FirebaseFunctions.instance,
+      notificationRepository: getIt<NotificationRepository>(),
+      prefsManager: getIt<PrefsManager>(),
+      notificationService: getIt<NotificationService>(),
     ),
   );
 }

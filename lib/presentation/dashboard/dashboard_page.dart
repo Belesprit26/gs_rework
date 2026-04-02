@@ -606,7 +606,7 @@ class _SettingsTabState extends State<_SettingsTab> {
 
     // Snapshot current state.
     final toggles = {
-      for (final type in NotificationType.values)
+      for (final type in NotificationType.settable)
         type: prefs.isNotificationTypeEnabled(type),
     };
 
@@ -620,14 +620,14 @@ class _SettingsTabState extends State<_SettingsTab> {
             children: [
               Text(
                 'Choose which notifications you want to receive. '
-                'Muted types are still recorded but won\'t appear '
-                'in your notification list.',
+                'Muted types still appear in the list but won\'t '
+                'count toward your badge or trigger alerts.',
                 style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                       color: Colors.grey.shade600,
                     ),
               ),
               const SizedBox(height: 16),
-              for (final type in NotificationType.values)
+              for (final type in NotificationType.settable)
                 _NotificationTypeToggle(
                   type: type,
                   enabled: toggles[type] ?? true,
@@ -721,6 +721,8 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Colors.green;
       case NotificationType.minTempAlert:
         return Colors.orange;
+      case NotificationType.unknown:
+        return Colors.grey;
     }
   }
 
@@ -732,6 +734,8 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Icons.local_fire_department;
       case NotificationType.minTempAlert:
         return Icons.warning_amber_rounded;
+      case NotificationType.unknown:
+        return Icons.help_outline;
     }
   }
 
@@ -743,6 +747,8 @@ class _NotificationTypeToggle extends StatelessWidget {
         return 'When geyser auto-turns on at min temp';
       case NotificationType.minTempAlert:
         return 'When temp drops to min (auto-reheat off)';
+      case NotificationType.unknown:
+        return 'Unknown event type';
     }
   }
 }
