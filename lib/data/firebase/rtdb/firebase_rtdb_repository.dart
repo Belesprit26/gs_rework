@@ -19,36 +19,48 @@ class FirebaseRtdbRepository implements RtdbRepository {
   final FirebaseDatabase _db;
 
   DatabaseReference _userRef() {
-    final uid = _auth.currentUser!.uid;
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw StateError('No authenticated user');
     return _db.ref('gs/$uid');
+  }
+
+  /// Defers [streamFactory] until a Firebase user is available.
+  /// If already authenticated, starts immediately.
+  Stream<T> _authed<T>(Stream<T> Function() streamFactory) {
+    if (_auth.currentUser != null) return streamFactory();
+    return _auth
+        .authStateChanges()
+        .where((u) => u != null)
+        .take(1)
+        .asyncExpand((_) => streamFactory());
   }
 
   // ── Live telemetry ─────────────────────────────────────────────
 
   @override
   Stream<GeyserLive> watchLive(String deviceId) {
-    return _userRef()
+    return _authed(() => _userRef()
         .child('live/$deviceId')
         .onValue
         .map((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) return const GeyserLive();
       return GeyserLive.fromMap(data);
-    });
+    }));
   }
 
   // ── Settings ───────────────────────────────────────────────────
 
   @override
   Stream<GeyserSettings> watchSettings(String deviceId) {
-    return _userRef()
+    return _authed(() => _userRef()
         .child('set/$deviceId')
         .onValue
         .map((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) return const GeyserSettings();
       return GeyserSettings.fromMap(data);
-    });
+    }));
   }
 
   @override
@@ -104,13 +116,13 @@ class FirebaseRtdbRepository implements RtdbRepository {
   @override
   Stream<DailyStats> watchTodayStats(String deviceId) {
     final today = _dateKey(DateTime.now());
-    return _userRef()
+    return _authed(() => _userRef()
         .child('stats/$deviceId/$today')
         .onValue
         .map((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       return DailyStats.fromMap(data);
-    });
+    }));
   }
 
   // ── Meta ───────────────────────────────────────────────────────

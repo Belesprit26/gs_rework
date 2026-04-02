@@ -46,24 +46,6 @@ class _DashboardPageState extends State<DashboardPage> {
       appBar: AppBar(
         title: const Text('GS Rework'),
         actions: [
-          // ── BLE status chip ──────────────────────────────────────
-          BlocBuilder<BleConnectionCubit, BleConnectionState>(
-            buildWhen: (p, n) =>
-                p.connectionStatus != n.connectionStatus ||
-                p.isWifiProvisioned != n.isWifiProvisioned,
-            builder: (context, state) => Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _BleStatusChip(state: state),
-                if (state.isWifiProvisioned) ...[
-                  const SizedBox(width: 4),
-                  _WifiStatusChip(state: state),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
-          // ── Notification bell ─────────────────────────────────
           const _NotificationBell(),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
@@ -128,76 +110,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-// ── BLE status chip ────────────────────────────────────────────────
-
-class _BleStatusChip extends StatelessWidget {
-  const _BleStatusChip({required this.state});
-
-  final BleConnectionState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color;
-    final IconData icon;
-
-    switch (state.connectionStatus) {
-      case BleConnectionStatus.ready:
-        color = Colors.blue;
-        icon = Icons.bluetooth_connected;
-      case BleConnectionStatus.connecting:
-      case BleConnectionStatus.discoveringServices:
-      case BleConnectionStatus.reconnecting:
-        color = Colors.orange;
-        icon = Icons.bluetooth_searching;
-      case BleConnectionStatus.scanning:
-        color = Colors.blue;
-        icon = Icons.bluetooth_searching;
-      case BleConnectionStatus.disconnected:
-        color = Colors.grey;
-        icon = Icons.bluetooth_disabled;
-    }
-
-    return ActionChip(
-      avatar: Icon(icon, size: 16, color: color),
-      label: Text(
-        state.statusLabel,
-        style: TextStyle(fontSize: 11, color: color),
-      ),
-      onPressed: () => Navigator.of(context).push(DeviceScanPage.route()),
-      visualDensity: VisualDensity.compact,
-      side: BorderSide(color: color.withValues(alpha: 0.3)),
-    );
-  }
-}
-
-// ── WiFi status chip ───────────────────────────────────────────────
-
-class _WifiStatusChip extends StatelessWidget {
-  const _WifiStatusChip({required this.state});
-
-  final BleConnectionState state;
-
-  @override
-  Widget build(BuildContext context) {
-    // WiFi chip is shown only when WiFi is provisioned.
-    // Green when connected (we know WiFi is running on the ESP).
-    // Grey when BLE is disconnected (last known: WiFi was provisioned).
-    final bool isLive = state.isConnected;
-    final Color color = isLive ? Colors.green : Colors.grey;
-    final String label = isLive ? 'Connected' : 'WiFi (cached)';
-
-    return ActionChip(
-      avatar: Icon(Icons.wifi, size: 16, color: color),
-      label: Text(
-        label,
-        style: TextStyle(fontSize: 11, color: color),
-      ),
-      onPressed: () => Navigator.of(context).push(DeviceScanPage.route()),
-      visualDensity: VisualDensity.compact,
-      side: BorderSide(color: color.withValues(alpha: 0.3)),
-    );
-  }
-}
 
 // ── Home tab ────────────────────────────────────────────────────────
 
@@ -257,7 +169,7 @@ class _HomeTab extends StatelessWidget {
             const SizedBox(height: 12),
 
             // ── Mode / connectivity banner ───────────────────────
-            _ModeBanner(state: state),
+            const _ModeBanner(),
             const SizedBox(height: 12),
 
             // ── Section label ────────────────────────────────────
@@ -838,40 +750,80 @@ class _NotificationTypeToggle extends StatelessWidget {
 // ── Mode / connectivity banner ────────────────────────────────────────
 
 class _ModeBanner extends StatelessWidget {
-  const _ModeBanner({required this.state});
-
-  final GeyserControlState state;
+  const _ModeBanner();
 
   @override
   Widget build(BuildContext context) {
+    final gState = context.watch<GeyserControlCubit>().state;
+    final bleState = context.watch<BleConnectionCubit>().state;
     final theme = Theme.of(context);
 
     final IconData icon;
     final String label;
     final Color color;
+    VoidCallback? onTap;
+    Widget? trailing;
 
-    switch (state.mode) {
+    switch (gState.mode) {
       case GeyserMode.ble:
         icon = Icons.bluetooth_connected;
         label = 'Connected via Bluetooth';
         color = Colors.blue;
+
       case GeyserMode.remote:
-        if (state.deviceOffline) {
+        if (gState.deviceOffline) {
           icon = Icons.cloud_off_rounded;
           label = 'Device offline';
           color = Colors.orange;
+          if (gState.deviceLastSeen != null) {
+            trailing = Text(
+              'Last seen ${_timeAgo(gState.deviceLastSeen!)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.orange.shade700,
+                fontSize: 11,
+              ),
+            );
+          }
         } else {
           icon = Icons.cloud_done_rounded;
           label = 'Connected via WiFi';
           color = Colors.green;
+          if (gState.deviceLastSeen != null) {
+            trailing = Text(
+              _timeAgo(gState.deviceLastSeen!),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.grey.shade600,
+                fontSize: 11,
+              ),
+            );
+          }
         }
+
       case GeyserMode.offline:
-        icon = Icons.cloud_off_rounded;
-        label = 'No connection';
-        color = Colors.grey;
+        final isBleConnecting =
+            gState.bleStatus == BleConnectionStatus.connecting ||
+            gState.bleStatus == BleConnectionStatus.discoveringServices ||
+            gState.bleStatus == BleConnectionStatus.reconnecting;
+
+        if (isBleConnecting) {
+          icon = Icons.bluetooth_searching;
+          label = 'Connecting…';
+          color = Colors.orange;
+          onTap = () => Navigator.of(context).push(DeviceScanPage.route());
+        } else if (!bleState.isBluetoothOn) {
+          icon = Icons.bluetooth_disabled;
+          label = 'Bluetooth is off';
+          color = Colors.grey;
+          onTap = () => Navigator.of(context).push(DeviceScanPage.route());
+        } else {
+          icon = Icons.cloud_off_rounded;
+          label = 'Not connected';
+          color = Colors.grey;
+          onTap = () => Navigator.of(context).push(DeviceScanPage.route());
+        }
     }
 
-    return Container(
+    final banner = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
@@ -891,23 +843,21 @@ class _ModeBanner extends StatelessWidget {
               ),
             ),
           ),
-          if (state.mode == GeyserMode.remote &&
-              state.deviceLastSeen != null) ...[
-            Text(
-              state.deviceOffline
-                  ? 'Last seen ${_timeAgo(state.deviceLastSeen!)}'
-                  : _timeAgo(state.deviceLastSeen!),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: state.deviceOffline
-                    ? Colors.orange.shade700
-                    : Colors.grey.shade600,
-                fontSize: 11,
-              ),
+          if (trailing != null) trailing,
+          if (onTap != null)
+            Icon(
+              Icons.chevron_right,
+              size: 16,
+              color: color.withValues(alpha: 0.6),
             ),
-          ],
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: banner);
+    }
+    return banner;
   }
 
   String _timeAgo(DateTime dt) {

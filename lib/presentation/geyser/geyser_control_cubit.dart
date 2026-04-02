@@ -40,7 +40,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     // If BLE isn't connected at construction time, start remote
     // sync right away so the user sees data immediately.
     if (_rtdb != null) {
-      emit(state.copyWith(mode: GeyserMode.remote));
+      emit(state.copyWith(mode: GeyserMode.remote, deviceOffline: true));
       _startRemoteSync();
     }
   }
@@ -194,11 +194,13 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     _liveSub?.cancel();
     _liveSub = rtdb.watchLive(_deviceId).listen((live) {
       if (_bleReady) return;
+      final isStale = live.lastSeen == null ||
+          DateTime.now().difference(live.lastSeen!) > _offlineThreshold;
       if (state.isBusy) {
         emit(state.copyWith(
           snapshot: state.snapshot.copyWith(temperature: live.temperature),
           deviceLastSeen: live.lastSeen,
-          deviceOffline: false,
+          deviceOffline: isStale,
         ));
       } else {
         emit(state.copyWith(
@@ -210,7 +212,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
           isLoading: false,
           error: null,
           deviceLastSeen: live.lastSeen,
-          deviceOffline: false,
+          deviceOffline: isStale,
         ));
       }
     });
@@ -234,7 +236,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     });
 
     _fetchRemoteSnapshot();
-    rtdb.touchAppActive();
+    rtdb.touchAppActive().catchError((_) {});
   }
 
   void _checkDeviceStaleness() {
@@ -317,11 +319,16 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
         status == BleConnectionStatus.reconnecting) {
       _bleReady = false;
       await _stopStreams();
-      if (_rtdb != null) {
-        emit(state.copyWith(mode: GeyserMode.remote));
-        _startRemoteSync();
-      } else {
-        emit(state.copyWith(mode: GeyserMode.offline));
+      // Only switch to remote/offline if we were on BLE.
+      // If already in remote mode (e.g. a failed BLE probe), leave
+      // RTDB streams untouched — no restart, no banner flash.
+      if (state.mode == GeyserMode.ble) {
+        if (_rtdb != null) {
+          emit(state.copyWith(mode: GeyserMode.remote, deviceOffline: true));
+          _startRemoteSync();
+        } else {
+          emit(state.copyWith(mode: GeyserMode.offline));
+        }
       }
     }
   }
