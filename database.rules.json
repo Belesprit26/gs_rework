@@ -40,8 +40,8 @@
         "set": {
           "$did": {
             "on":    { ".validate": "newData.isBoolean()" },
-            "max":   { ".validate": "newData.isNumber() && newData.val() >= 30 && newData.val() <= 75" },
-            "min":   { ".validate": "newData.isNumber() && newData.val() >= 10 && newData.val() <= 50" },
+            "max":   { ".validate": "newData.isNumber() && newData.val() >= 50 && newData.val() <= 70" },
+            "min":   { ".validate": "newData.isNumber() && newData.val() >= 5 && newData.val() <= 19" },
             "ar":    { ".validate": "newData.isBoolean()" },
             "tmask": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 31" },
             "tcust": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1439" },

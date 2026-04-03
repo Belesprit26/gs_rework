@@ -347,7 +347,16 @@ class _HomeTab extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Temperature Limits'),
+          title: Row(
+            children: [
+              const Expanded(child: Text('Temperature Limits')),
+              IconButton(
+                icon: const Icon(Icons.health_and_safety_outlined, size: 22),
+                tooltip: 'Water safety info',
+                onPressed: () => _showLegionellaInfo(ctx),
+              ),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -359,10 +368,10 @@ class _HomeTab extends StatelessWidget {
                 ],
               ),
               Slider(
-                min: 20,
-                max: 55,
-                divisions: 35,
-                value: min.toDouble(),
+                min: 5,
+                max: 19,
+                divisions: 14,
+                value: min.toDouble().clamp(5, 19),
                 onChanged: (v) => setDialogState(() => min = v.round()),
               ),
               const SizedBox(height: 8),
@@ -375,10 +384,10 @@ class _HomeTab extends StatelessWidget {
                 ],
               ),
               Slider(
-                min: 30,
+                min: 50,
                 max: 70,
-                divisions: 40,
-                value: max.toDouble(),
+                divisions: 20,
+                value: max.toDouble().clamp(50, 70),
                 onChanged: (v) => setDialogState(() => max = v.round()),
               ),
               const Divider(height: 24),
@@ -429,6 +438,117 @@ class _HomeTab extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Legionella safety info ────────────────────────────────────────
+
+  void _showLegionellaInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.health_and_safety, color: Theme.of(ctx).colorScheme.primary),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Water Safety', overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Why temperature matters',
+                style: Theme.of(ctx).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Legionella bacteria thrive in stored water between '
+                '20\u201345\u00B0C. Setting your geyser too low creates a health '
+                'risk. Here\u2019s what happens at each range:',
+              ),
+              const SizedBox(height: 16),
+
+              _infoRow(ctx, '< 20\u00B0C', 'Dormant \u2014 bacteria survive but don\u2019t multiply', Colors.blue),
+              _infoRow(ctx, '20\u201345\u00B0C', 'Danger zone \u2014 rapid growth, especially 35\u201340\u00B0C', Colors.red),
+              _infoRow(ctx, '50\u00B0C', 'Bacteria begin to die (slowly)', Colors.orange),
+              _infoRow(ctx, '60\u00B0C', 'Rapid die-off \u2014 killed within minutes', Colors.green),
+              _infoRow(ctx, '70\u00B0C+', 'Near-instant kill \u2014 thermal disinfection', Colors.green.shade800),
+
+              const SizedBox(height: 16),
+              Text(
+                'Recommendations',
+                style: Theme.of(ctx).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '\u2022  Keep your geyser at 60\u00B0C or above for safe stored water.\n'
+                '\u2022  Never store water below 50\u00B0C for extended periods.\n'
+                '\u2022  Water at the tap should reach 50\u201355\u00B0C within one minute.\n'
+                '\u2022  In summer 50\u201355\u00B0C may be acceptable; in winter aim for 60\u201365\u00B0C.',
+              ),
+
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'South Africa: SANS 893 addresses Legionella control in water '
+                  'systems. SANS 151 covers geyser insulation and heat loss. '
+                  'SANS 241 (drinking water) does not currently mandate '
+                  'Legionella testing \u2014 proper temperature management is your '
+                  'primary defence.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(BuildContext context, String range, String desc, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            margin: const EdgeInsets.only(top: 5, right: 10),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          ),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: Theme.of(context).textTheme.bodyMedium,
+                children: [
+                  TextSpan(
+                    text: '$range  ',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: desc),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
