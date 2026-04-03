@@ -33,10 +33,6 @@ abstract final class GattUuids {
   /// Properties: Read.
   static final deviceInfo = Guid('47530006-7652-4543-b201-c4b801a6c700');
 
-  /// Bulk telemetry transfer: buffered readings from while disconnected.
-  /// Properties: Read, Notify.
-  static final telemetryBulk = Guid('47530007-7652-4543-b201-c4b801a6c700');
-
   // ── Provisioning Service ──────────────────────────────────────────
 
   /// Provisioning service UUID.

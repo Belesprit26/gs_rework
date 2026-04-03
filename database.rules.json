@@ -73,7 +73,9 @@
         "meta": {
           "boot":            { ".validate": "newData.isNumber()" },
           "app":             { ".validate": "newData.val() === now" },
-          "offlineNotified": { ".validate": "newData.isBoolean()" },
+          "offlineNotified": {
+            "$did": { ".validate": "newData.isBoolean()" }
+          },
           "$other":          { ".validate": false }
         },
 

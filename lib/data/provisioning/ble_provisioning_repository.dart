@@ -41,9 +41,9 @@ class BleProvisioningRepository {
     );
   }
 
-  /// Write the device nickname (max 6 chars).
+  /// Write the device nickname (max 16 chars, matching PROV_NICKNAME_MAX).
   Future<void> writeDeviceName(String nickname) async {
-    final trimmed = nickname.length > 6 ? nickname.substring(0, 6) : nickname;
+    final trimmed = nickname.length > 16 ? nickname.substring(0, 16) : nickname;
     final bytes = Uint8List.fromList(utf8.encode(trimmed));
     await _ble.writeCharacteristic(GattUuids.provDeviceName.str, bytes);
     debugPrint('[Prov] Device name written: "$trimmed"');
