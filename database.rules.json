@@ -13,12 +13,7 @@
     "GeyserSwitch": {
       "$uid": {
         ".read": "auth !== null && auth.uid === $uid",
-        ".write": "auth !== null && auth.uid === $uid",
-
-        "ServiceInfo": {
-          ".read": "auth !== null",
-          ".write": "auth !== null"
-        }
+        ".write": "auth !== null && auth.uid === $uid"
       }
     },
 
@@ -40,8 +35,8 @@
         "set": {
           "$did": {
             "on":    { ".validate": "newData.isBoolean()" },
-            "max":   { ".validate": "newData.isNumber() && newData.val() >= 50 && newData.val() <= 70" },
-            "min":   { ".validate": "newData.isNumber() && newData.val() >= 5 && newData.val() <= 19" },
+            "max":   { ".validate": "newData.isNumber() && newData.val() >= 51 && newData.val() <= 65" },
+            "min":   { ".validate": "newData.isNumber() && newData.val() >= 5 && newData.val() <= 50" },
             "ar":    { ".validate": "newData.isBoolean()" },
             "tmask": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 31" },
             "tcust": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1439" },
