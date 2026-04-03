@@ -167,12 +167,12 @@ exports.onDeviceEvent = onValueWritten("gs/{uid}/events/{did}", async (event) =>
 
 // ── FCM push: device offline scheduler ───────────────────────────
 //
-// Runs every 5 minutes.  For each user with registered FCM tokens,
-// checks if the latest live/{did}/at timestamp is older than 5 min.
+// Runs every 2 minutes.  For each user with registered FCM tokens,
+// checks if the latest live/{did}/at timestamp is older than 2.5 min.
 // Sends a single "device offline" push per staleness window and
 // sets an offlineNotified flag to prevent repeat alerts.
 
-exports.checkDeviceOffline = onSchedule("every 5 minutes", async (event) => {
+exports.checkDeviceOffline = onSchedule("every 2 minutes", async (event) => {
   const db = admin.database();
   const firestore = admin.firestore();
 
@@ -180,7 +180,7 @@ exports.checkDeviceOffline = onSchedule("every 5 minutes", async (event) => {
   if (usersSnap.empty) return;
 
   const now = Date.now();
-  const THRESHOLD = 5 * 60 * 1000;
+  const THRESHOLD = 2.5 * 60 * 1000;
 
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
