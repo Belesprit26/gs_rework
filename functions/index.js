@@ -91,29 +91,6 @@ exports.registerFcmToken = onCall(async (request) => {
   return { ok: true };
 });
 
-/**
- * Sends a push notification to all of a user's registered devices.
- * Triggered by writes to the RTDB live node — called by the backend
- * when the ESP reports events that warrant user notification.
- *
- * Input: { uid: string, title: string, body: string, data?: object }
- */
-exports.sendPushToUser = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be signed in");
-  }
-
-  const { uid, title, body, data } = request.data;
-  const targetUid = uid || request.auth.uid;
-
-  if (targetUid !== request.auth.uid) {
-    throw new HttpsError("permission-denied", "Can only notify yourself");
-  }
-
-  const sent = await sendPushToAllTokens(targetUid, { title, body, data });
-  return { sent };
-});
-
 function tokenHash(token) {
   const crypto = require("crypto");
   return crypto.createHash("sha256").update(token).digest("hex").slice(0, 16);
