@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── User profiles ────────────────────────────────────────────────
+    // Both gs_rework and GeyserSwitch_Orange read/write the user's
+    // own profile document.  No cross-user access.
+    match /users/{uid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+
+    // ── FCM tokens ───────────────────────────────────────────────────
+    // Only Cloud Functions (Admin SDK) read and write FCM tokens.
+    // No client-side access is needed or allowed.
+    match /fcm_tokens/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Deny everything else ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
