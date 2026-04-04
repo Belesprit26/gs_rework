@@ -55,7 +55,6 @@ Future<void> registerData(GetIt getIt) async {
     () => FirebaseAuthRepository(
       auth: getIt<FirebaseAuth>(),
       firestore: getIt<FirebaseFirestore>(),
-      database: getIt<FirebaseDatabase>(),
     ),
   );
 

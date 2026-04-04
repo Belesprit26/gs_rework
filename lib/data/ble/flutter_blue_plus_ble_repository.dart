@@ -141,6 +141,7 @@ class FlutterBluePlusBleRepository implements BleRepository {
 
   /// Active notification subscriptions keyed by characteristic UUID string.
   final Map<String, StreamController<Uint8List>> _notifyControllers = {};
+  final Map<String, StreamSubscription<List<int>>> _platformSubs = {};
 
   @override
   Future<Uint8List> readCharacteristic(String characteristicId) async {
@@ -169,10 +170,9 @@ class FlutterBluePlusBleRepository implements BleRepository {
     );
     _notifyControllers[characteristicId] = controller;
 
-    // Enable notifications on the characteristic.
     c.setNotifyValue(true).then((_) {
-      // Pipe platform notifications into our controller.
-      c.onValueReceived.listen((bytes) {
+      _platformSubs[characteristicId]?.cancel();
+      _platformSubs[characteristicId] = c.onValueReceived.listen((bytes) {
         if (!controller.isClosed) {
           controller.add(Uint8List.fromList(bytes));
         }
@@ -192,6 +192,8 @@ class FlutterBluePlusBleRepository implements BleRepository {
 
   Future<void> _unsubscribeInternal(
       String characteristicId, BluetoothCharacteristic c) async {
+    await _platformSubs[characteristicId]?.cancel();
+    _platformSubs.remove(characteristicId);
     try {
       await c.setNotifyValue(false);
     } catch (_) {
@@ -217,7 +219,10 @@ class FlutterBluePlusBleRepository implements BleRepository {
   @override
   Future<void> dispose() async {
     _reconnectTimer?.cancel();
-    // Close all notification streams.
+    for (final sub in _platformSubs.values) {
+      await sub.cancel();
+    }
+    _platformSubs.clear();
     for (final controller in _notifyControllers.values) {
       await controller.close();
     }

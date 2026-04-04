@@ -10,6 +10,7 @@ import '../../domain/geyser/entities/geyser_settings.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/geyser/repositories/geyser_control_repository.dart';
 import '../../domain/geyser/repositories/rtdb_repository.dart';
+import '../../domain/geyser/timer_presets.dart';
 
 part 'geyser_control_state.dart';
 
@@ -279,17 +280,11 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   }
 
   List<GeyserTimer> _timersFromSettings(GeyserSettings settings) {
-    final presetTimes = [
-      const [4, 0],
-      const [6, 0],
-      const [15, 0],
-      const [17, 0],
-    ];
     final timers = <GeyserTimer>[];
-    for (int i = 0; i < presetTimes.length; i++) {
+    for (int i = 0; i < kPresetTimers.length; i++) {
       timers.add(GeyserTimer(
-        hour: presetTimes[i][0],
-        minute: presetTimes[i][1],
+        hour: kPresetTimers[i].hour,
+        minute: kPresetTimers[i].minute,
         enabled: (settings.timerMask & (1 << i)) != 0,
         isPreset: true,
       ));

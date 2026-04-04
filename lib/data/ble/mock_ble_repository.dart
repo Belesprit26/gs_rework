@@ -6,6 +6,7 @@ import '../../core/ble/gatt_uuids.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/entities/scanned_device.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
+import '../../domain/geyser/timer_presets.dart';
 
 /// A fake BLE repository for development and testing without hardware.
 ///
@@ -45,11 +46,8 @@ class MockBleRepository implements BleRepository {
 
   /// Timer config: 5 timers × 4 bytes [is_preset, enabled, hour, minute].
   final List<int> _mockTimerConfig = [
-    1, 0, 4, 0,   // Preset 1: 04:00, disabled
-    1, 0, 6, 0,   // Preset 2: 06:00, disabled
-    1, 0, 15, 0,  // Preset 3: 15:00, disabled
-    1, 0, 17, 0,  // Preset 4: 17:00, disabled
-    0, 0, 6, 0,   // Custom:   06:00, disabled
+    for (final p in kPresetTimers) ...[1, 0, p.hour, p.minute],
+    0, 0, kCustomTimerDefault.hour, kCustomTimerDefault.minute,
   ];
 
   /// Firmware version.

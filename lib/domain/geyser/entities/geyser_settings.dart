@@ -17,7 +17,7 @@ class GeyserSettings extends Equatable {
   final int minTemp;
   final bool autoReheat;
 
-  /// Bitmask for preset timers: bit0=04:00, bit1=06:00, bit2=15:00, bit3=17:00.
+  /// Bitmask for preset timers (see `timer_presets.dart` for the schedule).
   final int timerMask;
 
   /// Custom timer in minutes since midnight (0 = disabled).

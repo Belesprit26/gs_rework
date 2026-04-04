@@ -31,7 +31,7 @@ class GeyserSnapshot extends Equatable {
   /// When disabled, the app should alert the user instead.
   final bool autoReheat;
 
-  /// Active timer configurations (4 presets + 1 custom).
+  /// Active timer configurations (see `timer_presets.dart` for preset schedule).
   final List<GeyserTimer> timers;
 
   /// Firmware version string from the ESP32 (e.g. "0.2.0").

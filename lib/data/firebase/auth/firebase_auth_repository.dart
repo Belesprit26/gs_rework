@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/error/firebase_auth_error_mapper.dart';
@@ -15,14 +14,11 @@ class FirebaseAuthRepository implements AuthRepository {
   FirebaseAuthRepository({
     required FirebaseAuth auth,
     required FirebaseFirestore firestore,
-    required FirebaseDatabase database,
   })  : _auth = auth,
-        _firestore = firestore,
-        _database = database;
+        _firestore = firestore;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final FirebaseDatabase _database;
 
   // ── Auth state ────────────────────────────────────────────────────
 
@@ -104,8 +100,6 @@ class FirebaseAuthRepository implements AuthRepository {
         fullName: fullName,
         profilePic: kDefaultAvatar,
       );
-
-      await _initializeRealtimeDefaults(user.uid);
 
       final refreshed = await _getUserData(user.uid);
       final data = refreshed.data();
@@ -201,14 +195,4 @@ class FirebaseAuthRepository implements AuthRepository {
         );
   }
 
-  Future<void> _initializeRealtimeDefaults(String uid) async {
-    await _database
-        .ref()
-        .child('GeyserSwitch')
-        .child(uid)
-        .child('Geysers')
-        .child('geyser_1')
-        .child('sensor_1')
-        .set(0);
-  }
 }

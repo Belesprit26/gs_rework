@@ -19,6 +19,7 @@ import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/stat_tile.dart';
 import '../stats/device_stats_cubit.dart';
 import '../stats/stats_card.dart';
+import '../../domain/geyser/timer_presets.dart';
 
 /// The main app shell after sign-in.
 ///
@@ -234,13 +235,7 @@ class _HomeTab extends StatelessWidget {
     // Start with current timers. If empty (old firmware), seed defaults.
     final timers = snap.timers.isNotEmpty
         ? snap.timers.map((t) => t.copyWith()).toList()
-        : [
-            const GeyserTimer(hour: 4, minute: 0, isPreset: true, enabled: false),
-            const GeyserTimer(hour: 6, minute: 0, isPreset: true, enabled: false),
-            const GeyserTimer(hour: 15, minute: 0, isPreset: true, enabled: false),
-            const GeyserTimer(hour: 17, minute: 0, isPreset: true, enabled: false),
-            const GeyserTimer(hour: 6, minute: 0, isPreset: false, enabled: false),
-          ];
+        : defaultTimers();
 
     showDialog(
       context: context,
