@@ -51,4 +51,7 @@ abstract class GeyserControlRepository {
 
   /// Stop listening and clean up subscriptions.
   Future<void> stopListening();
+
+  /// Release all resources. Call when the repository is no longer needed.
+  Future<void> dispose();
 }

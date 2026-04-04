@@ -159,6 +159,13 @@ class BleGeyserControlRepository implements GeyserControlRepository {
     await _ble.unsubscribe(GattUuids.geyserState.str);
   }
 
+  @override
+  Future<void> dispose() async {
+    await stopListening();
+    await _tempController.close();
+    await _stateController.close();
+  }
+
   // ── Private: byte decoders ────────────────────────────────────────
 
   /// Decode int16 LE → °C.
