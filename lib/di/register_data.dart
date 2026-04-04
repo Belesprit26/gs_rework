@@ -10,6 +10,7 @@ import 'package:get_it/get_it.dart';
 import '../data/ble/flutter_blue_plus_ble_repository.dart';
 import '../data/ble/mock_ble_repository.dart';
 import '../data/firebase/auth/firebase_auth_repository.dart';
+import '../data/firebase/config/geyser_config_repository.dart';
 import '../data/firebase/fcm/push_notification_manager.dart';
 import '../data/firebase/remote_config/firebase_remote_config_repository.dart';
 import '../data/firebase/rtdb/firebase_rtdb_repository.dart';
@@ -63,6 +64,14 @@ Future<void> registerData(GetIt getIt) async {
   );
   await remoteConfigRepo.initialize();
   getIt.registerLazySingleton<RemoteConfigRepository>(() => remoteConfigRepo);
+
+  // Geyser config (Firestore — syncs across devices)
+  getIt.registerLazySingleton<GeyserConfigRepository>(
+    () => GeyserConfigRepository(
+      auth: getIt<FirebaseAuth>(),
+      firestore: getIt<FirebaseFirestore>(),
+    ),
+  );
 
   // BLE
   getIt.registerLazySingleton<BleRepository>(

@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 
+import '../data/firebase/config/geyser_config_repository.dart';
 import '../data/local/prefs_manager.dart';
 import '../data/provisioning/ble_provisioning_repository.dart';
 import '../domain/auth/repositories/auth_repository.dart';
@@ -15,6 +16,7 @@ import '../presentation/ble/ble_connection_cubit.dart';
 import '../presentation/geyser/geyser_control_cubit.dart';
 import '../presentation/notifications/notification_service.dart';
 import '../presentation/provisioning/provisioning_cubit.dart';
+import '../presentation/stats/device_stats_cubit.dart';
 
 void registerPresentation(GetIt getIt) {
   getIt.registerFactory<AuthGateCubit>(() => AuthGateCubit());
@@ -45,6 +47,15 @@ void registerPresentation(GetIt getIt) {
       provisioningRepository: getIt<BleProvisioningRepository>(),
       authRepository: getIt<AuthRepository>(),
       bleRepository: getIt<BleRepository>(),
+    ),
+  );
+
+  // Device stats — singleton, streams daily stats + user config
+  getIt.registerLazySingleton<DeviceStatsCubit>(
+    () => DeviceStatsCubit(
+      rtdbRepository: getIt<RtdbRepository>(),
+      configRepository: getIt<GeyserConfigRepository>(),
+      deviceId: 'g1',
     ),
   );
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/firebase/config/geyser_config_repository.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../di/locator.dart';
 import '../../domain/auth/usecases/sign_out.dart';
@@ -16,6 +17,8 @@ import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
 import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/stat_tile.dart';
+import '../stats/device_stats_cubit.dart';
+import '../stats/stats_card.dart';
 
 /// The main app shell after sign-in.
 ///
@@ -202,6 +205,10 @@ class _HomeTab extends StatelessWidget {
               title: 'Firmware',
               subtitle: snap.firmwareVersion ?? '–',
             ),
+
+            // ── Daily usage stats ────────────────────────────────
+            const SizedBox(height: 16),
+            const StatsCard(),
 
             // ── Error banner ─────────────────────────────────────
             if (state.error != null) ...[
@@ -685,13 +692,14 @@ class _SettingsTabState extends State<_SettingsTab> {
   Widget build(BuildContext context) {
     final prefs = getIt<PrefsManager>();
     final anyEnabled = prefs.anyNotificationEnabled;
+    final theme = Theme.of(context);
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
         Text(
           'Settings',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
         ),
@@ -717,8 +725,184 @@ class _SettingsTabState extends State<_SettingsTab> {
             setState(() {}); // Refresh after changes.
           },
         ),
+        const SizedBox(height: 20),
+        ListTile(
+          leading: const Icon(Icons.settings_outlined),
+          title: const Text('Geyser Setup'),
+          subtitle: BlocBuilder<DeviceStatsCubit, DeviceStatsState>(
+            builder: (context, state) {
+              final c = state.config;
+              return Text(
+                '${c.tankSize}L · ${c.elementKw.toStringAsFixed(1)} kW · '
+                'R${c.costPerKwh.toStringAsFixed(2)}/kWh',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
+                ),
+              );
+            },
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showGeyserSetupDialog(context),
+        ),
       ],
     );
+  }
+
+  Future<void> _showGeyserSetupDialog(BuildContext context) async {
+    final configRepo = getIt<GeyserConfigRepository>();
+    final statsCubit = context.read<DeviceStatsCubit>();
+    var config = statsCubit.state.config;
+
+    final rateController = TextEditingController(
+      text: config.costPerKwh.toStringAsFixed(2),
+    );
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final theme = Theme.of(ctx);
+          return AlertDialog(
+            title: const Text('Geyser Setup'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'These settings are used to calculate your energy '
+                    'usage and savings. They sync across all your devices.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  DropdownButtonFormField<int>(
+                    initialValue: config.tankSize,
+                    decoration: const InputDecoration(
+                      labelText: 'Tank size',
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 100, child: Text('100 litres')),
+                      DropdownMenuItem(value: 150, child: Text('150 litres')),
+                      DropdownMenuItem(value: 200, child: Text('200 litres')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(() => config = config.copyWith(tankSize: v));
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
+                  DropdownButtonFormField<double>(
+                    initialValue: config.elementKw,
+                    decoration: const InputDecoration(
+                      labelText: 'Element wattage',
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 2.0, child: Text('2.0 kW')),
+                      DropdownMenuItem(value: 2.5, child: Text('2.5 kW')),
+                      DropdownMenuItem(value: 3.0, child: Text('3.0 kW')),
+                      DropdownMenuItem(value: 4.0, child: Text('4.0 kW')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(() => config = config.copyWith(elementKw: v));
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
+                  TextFormField(
+                    controller: rateController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Electricity rate (R/kWh)',
+                      prefixText: 'R ',
+                      isDense: true,
+                      helperText:
+                          'Eskom: ~R2.71 · City Power: ~R3.16\n'
+                          'Cape Town: ~R3.91 · Durban: ~R2.24',
+                      helperMaxLines: 2,
+                      helperStyle: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade500,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  DropdownButtonFormField<int>(
+                    initialValue: config.householdSize,
+                    decoration: const InputDecoration(
+                      labelText: 'Household size',
+                      isDense: true,
+                    ),
+                    items: List.generate(
+                      8,
+                      (i) => DropdownMenuItem(
+                        value: i + 1,
+                        child: Text('${i + 1} ${i == 0 ? 'person' : 'people'}'),
+                      ),
+                    ),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(
+                            () => config = config.copyWith(householdSize: v));
+                      }
+                    },
+                  ),
+
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 14, color: Colors.grey.shade400),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Most SA homes have a 150L geyser with a 3 kW '
+                          'element. Check the label on your geyser if unsure.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.grey.shade500,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final parsed = double.tryParse(rateController.text);
+                  if (parsed != null && parsed > 0) {
+                    config = config.copyWith(costPerKwh: parsed);
+                  }
+                  await configRepo.saveConfig(config);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    rateController.dispose();
   }
 
   Future<void> _showNotificationSettingsDialog(BuildContext context) async {
