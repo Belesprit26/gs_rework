@@ -255,7 +255,8 @@ class MockBleRepository implements BleRepository {
     // Provisioning writes — accept silently.
     if (characteristicId == GattUuids.provWifiCreds.str ||
         characteristicId == GattUuids.provUserBind.str ||
-        characteristicId == GattUuids.provDeviceName.str) {
+        characteristicId == GattUuids.provDeviceName.str ||
+        characteristicId == GattUuids.provAuthData.str) {
       return;
     }
     // Buffer acknowledge — accept silently.

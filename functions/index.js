@@ -1,11 +1,14 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onValueWritten } = require("firebase-functions/v2/database");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 
 const FIREBASE_API_KEY = "AIzaSyD2m4T7ylElcXPbPS9YupoRFX2ebfjB7bI";
+
+const ESP_AUTH_KEY = defineSecret("ESP_AUTH_KEY");
 
 /**
  * Creates a Firebase custom token for the calling user, exchanges it
@@ -144,58 +147,76 @@ exports.onDeviceEvent = onValueWritten("gs/{uid}/events/{did}", async (event) =>
 
 // ── FCM push: device offline scheduler ───────────────────────────
 //
-// Runs every 2 minutes.  For each user with registered FCM tokens,
-// checks if the latest live/{did}/at timestamp is older than 2.5 min.
-// Sends a single "device offline" push per staleness window and
-// sets an offlineNotified flag to prevent repeat alerts.
+// Runs every 2 minutes.
+//
+// Cost strategy:
+//   • Firestore listDocuments() to get user IDs — zero doc reads.
+//   • Per user: 2 targeted RTDB reads (live + offlineNotified only).
+//     Does NOT download stats/settings/events.
+//   • sendPushToAllTokens (the expensive Firestore subcollection
+//     read) fires ONLY on state transitions.
+//   • All users processed in parallel.
 
 exports.checkDeviceOffline = onSchedule("every 2 minutes", async (event) => {
   const db = admin.database();
   const firestore = admin.firestore();
-
-  const usersSnap = await firestore.collection("fcm_tokens").get();
-  if (usersSnap.empty) return;
-
   const now = Date.now();
   const THRESHOLD = 2.5 * 60 * 1000;
 
-  for (const userDoc of usersSnap.docs) {
-    const uid = userDoc.id;
+  const userRefs = await firestore.collection("fcm_tokens").listDocuments();
+  if (userRefs.length === 0) return;
 
-    const liveSnap = await db.ref(`gs/${uid}/live`).once("value");
+  await Promise.all(userRefs.map(async (ref) => {
+    const uid = ref.id;
+
+    const [liveSnap, flagsSnap] = await Promise.all([
+      db.ref(`gs/${uid}/live`).once("value"),
+      db.ref(`gs/${uid}/meta/offlineNotified`).once("value"),
+    ]);
+
     const live = liveSnap.val();
-    if (!live) continue;
+    if (!live) return;
+
+    const flags = flagsSnap.val() || {};
+    const transitions = [];
 
     for (const did of Object.keys(live)) {
       const lastSeen = live[did]?.at;
       if (!lastSeen) continue;
 
-      const flagRef = db.ref(`gs/${uid}/meta/offlineNotified/${did}`);
-      const flagSnap = await flagRef.once("value");
-      const alreadyNotified = flagSnap.val() === true;
-
       const isOffline = (now - lastSeen) > THRESHOLD;
+      const alreadyNotified = flags[did] === true;
 
       if (isOffline && !alreadyNotified) {
         const ago = Math.round((now - lastSeen) / 60000);
-        await sendPushToAllTokens(uid, {
-          title: "Device offline",
-          body: `Your geyser hasn't reported in ${ago} minutes`,
-          data: { type: "device_offline", deviceId: did },
-        });
-        await flagRef.set(true);
-        console.log(`checkDeviceOffline: uid=${uid} did=${did} offline ${ago}m`);
+        transitions.push(
+          sendPushToAllTokens(uid, {
+            title: "Device offline",
+            body: `Your geyser hasn't reported in ${ago} minutes`,
+            data: { type: "device_offline", deviceId: did },
+          }).then(() => {
+            db.ref(`gs/${uid}/meta/offlineNotified/${did}`).set(true);
+            console.log(`checkDeviceOffline: uid=${uid} did=${did} offline ${ago}m`);
+          })
+        );
       } else if (!isOffline && alreadyNotified) {
-        await sendPushToAllTokens(uid, {
-          title: "Device back online",
-          body: "Your geyser is reporting again",
-          data: { type: "device_online", deviceId: did },
-        });
-        await flagRef.remove();
-        console.log(`checkDeviceOffline: uid=${uid} did=${did} back online`);
+        transitions.push(
+          sendPushToAllTokens(uid, {
+            title: "Device back online",
+            body: "Your geyser is reporting again",
+            data: { type: "device_online", deviceId: did },
+          }).then(() => {
+            db.ref(`gs/${uid}/meta/offlineNotified/${did}`).remove();
+            console.log(`checkDeviceOffline: uid=${uid} did=${did} back online`);
+          })
+        );
       }
     }
-  }
+
+    if (transitions.length > 0) {
+      await Promise.all(transitions);
+    }
+  }));
 });
 
 // ── Shared FCM send helper ───────────────────────────────────────
@@ -326,101 +347,142 @@ exports.sendNotification = onCall(async (request) => {
 
 /**
  * HTTP endpoint for the ESP32 to send push notifications directly.
- * Authenticates via a shared authKey (not Firebase Auth).
+ *
+ * Security layers:
+ *   1. Shared secret read from Firebase Secret Manager (ESP_AUTH_KEY),
+ *      with a fallback to the legacy hardcoded key so existing units
+ *      keep working until the secret is provisioned.
+ *   2. userId must correspond to a real Firebase Auth account.
+ *   3. Per-userId rate limit (max 10 requests / minute, in-memory).
  */
-exports.sendNotificationFromESP32 = onRequest(async (req, res) => {
-  if (req.method !== "POST") {
-    return res.status(405).send("Method Not Allowed");
+
+const _espRateMap = new Map();
+const ESP_RATE_WINDOW_MS = 60_000;
+const ESP_RATE_MAX = 10;
+
+function espRateOk(uid) {
+  const now = Date.now();
+  let bucket = _espRateMap.get(uid);
+  if (!bucket || now - bucket.windowStart > ESP_RATE_WINDOW_MS) {
+    bucket = { windowStart: now, count: 0 };
+    _espRateMap.set(uid, bucket);
   }
+  bucket.count++;
+  return bucket.count <= ESP_RATE_MAX;
+}
 
-  const { title, body, data, userId, authKey } = req.body;
-
-  if (authKey !== "geyserswitch-bloc-orange") {
-    console.warn("sendNotificationFromESP32: invalid authKey");
-    return res.status(400).send("Invalid authKey");
-  }
-
-  if (!title || !body || !userId) {
-    console.warn("sendNotificationFromESP32: missing fields", req.body);
-    return res.status(400).send("Missing required fields");
-  }
-
-  console.log(`sendNotificationFromESP32: userId=${userId}, title="${title}"`);
-
-  try {
-    const tokensSnapshot = await admin
-      .database()
-      .ref(`/GeyserSwitch/${userId}/ServiceInfo/notificationTokens`)
-      .once("value");
-    const tokens = tokensSnapshot.val();
-
-    if (!tokens) {
-      console.log("sendNotificationFromESP32: no tokens for user", userId);
-      return res.status(400).send("No tokens found for userId");
+exports.sendNotificationFromESP32 = onRequest(
+  { secrets: [ESP_AUTH_KEY] },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      return res.status(405).send("Method Not Allowed");
     }
 
-    const deviceTokens = Object.keys(tokens);
-    console.log(`sendNotificationFromESP32: ${deviceTokens.length} tokens`);
+    const { title, body, data, userId, authKey } = req.body;
 
-    const dataPayload = {};
-    if (data) {
-      for (const key in data) {
-        if (data.hasOwnProperty(key)) {
-          dataPayload[key] = String(data[key]);
+    // --- Layer 1: shared-secret check ---
+    const expectedKey = ESP_AUTH_KEY.value() || "geyserswitch-bloc-orange";
+    if (authKey !== expectedKey) {
+      console.warn("sendNotificationFromESP32: invalid authKey");
+      return res.status(403).send("Forbidden");
+    }
+
+    if (!title || !body || !userId) {
+      console.warn("sendNotificationFromESP32: missing fields", req.body);
+      return res.status(400).send("Missing required fields");
+    }
+
+    // --- Layer 2: userId must be a real Firebase Auth user ---
+    try {
+      await admin.auth().getUser(userId);
+    } catch (e) {
+      console.warn(`sendNotificationFromESP32: unknown userId ${userId}`);
+      return res.status(403).send("Forbidden");
+    }
+
+    // --- Layer 3: per-user rate limit ---
+    if (!espRateOk(userId)) {
+      console.warn(`sendNotificationFromESP32: rate limit hit for ${userId}`);
+      return res.status(429).send("Too Many Requests");
+    }
+
+    console.log(`sendNotificationFromESP32: userId=${userId}, title="${title}"`);
+
+    try {
+      const tokensSnapshot = await admin
+        .database()
+        .ref(`/GeyserSwitch/${userId}/ServiceInfo/notificationTokens`)
+        .once("value");
+      const tokens = tokensSnapshot.val();
+
+      if (!tokens) {
+        console.log("sendNotificationFromESP32: no tokens for user", userId);
+        return res.status(400).send("No tokens found for userId");
+      }
+
+      const deviceTokens = Object.keys(tokens);
+      console.log(`sendNotificationFromESP32: ${deviceTokens.length} tokens`);
+
+      const dataPayload = {};
+      if (data) {
+        for (const key in data) {
+          if (Object.prototype.hasOwnProperty.call(data, key)) {
+            dataPayload[key] = String(data[key]);
+          }
         }
       }
-    }
 
-    const messages = deviceTokens.map((token) => ({
-      token,
-      notification: { title, body },
-      data: dataPayload,
-      android: {
-        notification: {
-          channel_id: "high_importance_channel",
-          priority: "high",
+      const messages = deviceTokens.map((token) => ({
+        token,
+        notification: { title, body },
+        data: dataPayload,
+        android: {
+          notification: {
+            channel_id: "high_importance_channel",
+            priority: "high",
+          },
         },
-      },
-      apns: {
-        headers: { "apns-priority": "10" },
-        payload: {
-          aps: { alert: { title, body }, sound: "default", badge: 1 },
+        apns: {
+          headers: { "apns-priority": "10" },
+          payload: {
+            aps: { alert: { title, body }, sound: "default", badge: 1 },
+          },
         },
-      },
-    }));
+      }));
 
-    const response = await admin.messaging().sendEach(messages);
-    console.log(`sendNotificationFromESP32: sent=${response.successCount}, failed=${response.failureCount}`);
+      const response = await admin.messaging().sendEach(messages);
+      console.log(`sendNotificationFromESP32: sent=${response.successCount}, failed=${response.failureCount}`);
 
-    const tokensToRemove = [];
-    response.responses.forEach((result, index) => {
-      if (result.error) {
-        const code = result.error.code;
-        if (
-          code === "messaging/invalid-registration-token" ||
-          code === "messaging/registration-token-not-registered"
-        ) {
-          tokensToRemove.push(deviceTokens[index]);
+      const tokensToRemove = [];
+      response.responses.forEach((result, index) => {
+        if (result.error) {
+          const code = result.error.code;
+          if (
+            code === "messaging/invalid-registration-token" ||
+            code === "messaging/registration-token-not-registered"
+          ) {
+            tokensToRemove.push(deviceTokens[index]);
+          }
         }
+      });
+
+      if (tokensToRemove.length > 0) {
+        const removePromises = tokensToRemove.map((token) =>
+          admin
+            .database()
+            .ref(
+              `/GeyserSwitch/${userId}/ServiceInfo/notificationTokens/${token}`
+            )
+            .remove()
+        );
+        await Promise.all(removePromises);
+        console.log(`sendNotificationFromESP32: removed ${tokensToRemove.length} invalid tokens`);
       }
-    });
 
-    if (tokensToRemove.length > 0) {
-      const removePromises = tokensToRemove.map((token) =>
-        admin
-          .database()
-          .ref(
-            `/GeyserSwitch/${userId}/ServiceInfo/notificationTokens/${token}`
-          )
-          .remove()
-      );
-      await Promise.all(removePromises);
-      console.log(`sendNotificationFromESP32: removed ${tokensToRemove.length} invalid tokens`);
+      res.status(200).send("Notification sent successfully");
+    } catch (error) {
+      console.error("sendNotificationFromESP32 error:", error);
+      res.status(500).send(`Internal Server Error: ${error.message}`);
     }
-
-    res.status(200).send("Notification sent successfully");
-  } catch (error) {
-    console.error("sendNotificationFromESP32 error:", error);
-    res.status(500).send(`Internal Server Error: ${error.message}`);
   }
-});
+);

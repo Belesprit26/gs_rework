@@ -77,10 +77,9 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   /// **Local mode:** Sends BLE write; confirmation comes via the
   /// geyser-state notification stream.
   Future<void> toggleGeyser() async {
-    if (state.isBusy) return;
+    if (isClosed || state.isBusy) return;
     final desired = !state.snapshot.isOn;
 
-    // Optimistic update
     emit(state.copyWith(
       isBusy: true,
       error: null,
@@ -94,6 +93,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
           desired,
           timeout: const Duration(seconds: 10),
         );
+        if (isClosed) return;
         if (!confirmed) {
           emit(state.copyWith(
             isBusy: false,
@@ -104,9 +104,10 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
         }
       } else {
         await _geyser.setGeyserState(desired);
+        if (isClosed) return;
       }
     } catch (e) {
-      // Revert on error
+      if (isClosed) return;
       emit(state.copyWith(
         isBusy: false,
         snapshot: state.snapshot.copyWith(isOn: !desired),
@@ -124,6 +125,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     required int max,
     required bool autoReheat,
   }) async {
+    if (isClosed) return;
     emit(state.copyWith(error: null));
     try {
       if (_useRemote) {
@@ -136,6 +138,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
         await _geyser.setTempLimits(
             min: min, max: max, autoReheat: autoReheat);
       }
+      if (isClosed) return;
       emit(state.copyWith(
         snapshot: state.snapshot.copyWith(
           minTemp: min,
@@ -144,12 +147,14 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
         ),
       ));
     } catch (e) {
+      if (isClosed) return;
       emit(state.copyWith(error: e.toString()));
     }
   }
 
   /// Write timer configuration.
   Future<void> setTimers(List<GeyserTimer> timers) async {
+    if (isClosed) return;
     emit(state.copyWith(error: null));
     try {
       if (_useRemote) {
@@ -169,10 +174,12 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
       } else {
         await _geyser.setTimers(timers);
       }
+      if (isClosed) return;
       emit(state.copyWith(
         snapshot: state.snapshot.copyWith(timers: timers),
       ));
     } catch (e) {
+      if (isClosed) return;
       emit(state.copyWith(error: e.toString()));
     }
   }
@@ -194,7 +201,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
 
     _liveSub?.cancel();
     _liveSub = rtdb.watchLive(_deviceId).listen((live) {
-      if (_bleReady) return;
+      if (isClosed || _bleReady) return;
       final isStale = live.lastSeen == null ||
           DateTime.now().difference(live.lastSeen!) > _offlineThreshold;
       if (state.isBusy) {
@@ -220,7 +227,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
 
     _settingsSub?.cancel();
     _settingsSub = rtdb.watchSettings(_deviceId).listen((settings) {
-      if (_bleReady) return;
+      if (isClosed || _bleReady) return;
       emit(state.copyWith(
         snapshot: state.snapshot.copyWith(
           minTemp: settings.minTemp,
@@ -233,6 +240,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
 
     _heartbeat?.cancel();
     _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (isClosed) return;
       _checkDeviceStaleness();
     });
 
@@ -241,6 +249,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   }
 
   void _checkDeviceStaleness() {
+    if (isClosed) return;
     final lastSeen = state.deviceLastSeen;
     final isStale = lastSeen == null ||
         DateTime.now().difference(lastSeen) > _offlineThreshold;
@@ -260,10 +269,11 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
 
   Future<void> _fetchRemoteSnapshot() async {
     final rtdb = _rtdb;
-    if (rtdb == null) return;
+    if (rtdb == null || isClosed) return;
     emit(state.copyWith(isLoading: true, error: null));
     try {
       final settings = await rtdb.readSettings(_deviceId);
+      if (isClosed) return;
       emit(state.copyWith(
         isLoading: false,
         snapshot: state.snapshot.copyWith(
@@ -275,6 +285,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
         ),
       ));
     } catch (e) {
+      if (isClosed) return;
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
   }
@@ -301,22 +312,24 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   // ── Private: BLE status listener ──────────────────────────────────
 
   Future<void> _onBleStatusChanged(BleConnectionStatus status) async {
+    if (isClosed) return;
     emit(state.copyWith(bleStatus: status));
 
     if (status == BleConnectionStatus.ready) {
       _bleReady = true;
       await _stopRemoteSync();
+      if (isClosed) return;
       emit(state.copyWith(mode: GeyserMode.ble));
       await _fetchInitialSnapshot();
+      if (isClosed) return;
       await _pushPhoneTime();
+      if (isClosed) return;
       await _startStreams();
     } else if (status == BleConnectionStatus.disconnected ||
         status == BleConnectionStatus.reconnecting) {
       _bleReady = false;
       await _stopStreams();
-      // Only switch to remote/offline if we were on BLE.
-      // If already in remote mode (e.g. a failed BLE probe), leave
-      // RTDB streams untouched — no restart, no banner flash.
+      if (isClosed) return;
       if (state.mode == GeyserMode.ble) {
         if (_rtdb != null) {
           emit(state.copyWith(mode: GeyserMode.remote, deviceOffline: true));
@@ -329,11 +342,14 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   }
 
   Future<void> _fetchInitialSnapshot() async {
+    if (isClosed) return;
     emit(state.copyWith(isLoading: true, error: null));
     try {
       final snapshot = await _geyser.readSnapshot();
+      if (isClosed) return;
       emit(state.copyWith(snapshot: snapshot, isLoading: false));
     } catch (e) {
+      if (isClosed) return;
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
   }
@@ -349,15 +365,17 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
 
   Future<void> _startStreams() async {
     await _geyser.startListening();
+    if (isClosed) return;
 
     _tempSub = _geyser.temperatureStream.listen((temp) {
+      if (isClosed) return;
       emit(state.copyWith(
         snapshot: state.snapshot.copyWith(temperature: temp),
       ));
     });
 
     _stateSub = _geyser.geyserStateStream.listen((isOn) {
-      // Clear isBusy — the device has confirmed the state change.
+      if (isClosed) return;
       emit(state.copyWith(
         snapshot: state.snapshot.copyWith(isOn: isOn),
         isBusy: false,

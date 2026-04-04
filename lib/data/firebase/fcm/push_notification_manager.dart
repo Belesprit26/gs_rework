@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_functions/cloud_functions.dart';
@@ -107,6 +108,9 @@ class PushNotificationManager {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<RemoteMessage>? _foregroundSub;
+  StreamSubscription<RemoteMessage>? _messageOpenedSub;
 
   /// Global navigator key — set on [MaterialApp] to allow navigation
   /// from notification taps outside the widget tree.
@@ -152,11 +156,12 @@ class PushNotificationManager {
       await _registerToken(token);
     }
 
-    _messaging.onTokenRefresh.listen(_registerToken);
+    _tokenRefreshSub = _messaging.onTokenRefresh.listen(_registerToken);
 
-    FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+    _foregroundSub = FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
-    FirebaseMessaging.onMessageOpenedApp.listen(_onNotificationTapped);
+    _messageOpenedSub =
+        FirebaseMessaging.onMessageOpenedApp.listen(_onNotificationTapped);
 
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
@@ -166,6 +171,17 @@ class PushNotificationManager {
     if (kDebugMode) {
       debugPrint('[FCM] Initialized — permission=${settings.authorizationStatus}');
     }
+  }
+
+  /// Cancel all stream subscriptions. Safe to call even if not initialized.
+  Future<void> dispose() async {
+    await _tokenRefreshSub?.cancel();
+    await _foregroundSub?.cancel();
+    await _messageOpenedSub?.cancel();
+    _tokenRefreshSub = null;
+    _foregroundSub = null;
+    _messageOpenedSub = null;
+    _initialized = false;
   }
 
   // ── Private ───────────────────────────────────────────────────────

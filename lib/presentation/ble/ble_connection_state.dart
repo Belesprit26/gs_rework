@@ -73,23 +73,33 @@ class BleConnectionState extends Equatable {
   BleConnectionState copyWith({
     BleConnectionStatus? connectionStatus,
     List<ScannedDevice>? scannedDevices,
-    String? pairedDeviceId,
-    String? pairedDeviceName,
-    String? scanError,
+    Object? pairedDeviceId = _sentinel,
+    Object? pairedDeviceName = _sentinel,
+    Object? scanError = _sentinel,
     bool? isWifiProvisioned,
-    String? wifiSsid,
-    String? deviceNickname,
+    Object? wifiSsid = _sentinel,
+    Object? deviceNickname = _sentinel,
     bool? isBluetoothOn,
   }) {
     return BleConnectionState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
       scannedDevices: scannedDevices ?? this.scannedDevices,
-      pairedDeviceId: pairedDeviceId ?? this.pairedDeviceId,
-      pairedDeviceName: pairedDeviceName ?? this.pairedDeviceName,
-      scanError: scanError ?? this.scanError,
+      pairedDeviceId: identical(pairedDeviceId, _sentinel)
+          ? this.pairedDeviceId
+          : pairedDeviceId as String?,
+      pairedDeviceName: identical(pairedDeviceName, _sentinel)
+          ? this.pairedDeviceName
+          : pairedDeviceName as String?,
+      scanError: identical(scanError, _sentinel)
+          ? this.scanError
+          : scanError as String?,
       isWifiProvisioned: isWifiProvisioned ?? this.isWifiProvisioned,
-      wifiSsid: wifiSsid ?? this.wifiSsid,
-      deviceNickname: deviceNickname ?? this.deviceNickname,
+      wifiSsid: identical(wifiSsid, _sentinel)
+          ? this.wifiSsid
+          : wifiSsid as String?,
+      deviceNickname: identical(deviceNickname, _sentinel)
+          ? this.deviceNickname
+          : deviceNickname as String?,
       isBluetoothOn: isBluetoothOn ?? this.isBluetoothOn,
     );
   }

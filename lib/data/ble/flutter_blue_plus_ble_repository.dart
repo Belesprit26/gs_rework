@@ -143,24 +143,40 @@ class FlutterBluePlusBleRepository implements BleRepository {
   final Map<String, StreamController<Uint8List>> _notifyControllers = {};
   final Map<String, StreamSubscription<List<int>>> _platformSubs = {};
 
+  static const _gattRetries = 3;
+  static const _gattRetryDelay = Duration(milliseconds: 600);
+
+  /// Retry wrapper for BLE operations that may fail transiently while
+  /// the link is still encrypting after Just Works pairing.
+  Future<T> _withRetry<T>(Future<T> Function() op) async {
+    for (int attempt = 1; attempt <= _gattRetries; attempt++) {
+      try {
+        return await op();
+      } catch (e) {
+        if (attempt == _gattRetries) rethrow;
+        await Future<void>.delayed(_gattRetryDelay);
+      }
+    }
+    throw StateError('unreachable');
+  }
+
   @override
   Future<Uint8List> readCharacteristic(String characteristicId) async {
     final c = _resolveCharacteristic(characteristicId);
-    final bytes = await c.read();
+    final bytes = await _withRetry(() => c.read());
     return Uint8List.fromList(bytes);
   }
 
   @override
   Future<void> writeCharacteristic(String characteristicId, Uint8List value) async {
     final c = _resolveCharacteristic(characteristicId);
-    await c.write(value, withoutResponse: false);
+    await _withRetry(() => c.write(value, withoutResponse: false));
   }
 
   @override
   Stream<Uint8List> subscribe(String characteristicId) {
     final c = _resolveCharacteristic(characteristicId);
 
-    // Reuse existing controller if already subscribed.
     if (_notifyControllers.containsKey(characteristicId)) {
       return _notifyControllers[characteristicId]!.stream;
     }
@@ -170,13 +186,17 @@ class FlutterBluePlusBleRepository implements BleRepository {
     );
     _notifyControllers[characteristicId] = controller;
 
-    c.setNotifyValue(true).then((_) {
+    _withRetry(() => c.setNotifyValue(true)).then((_) {
       _platformSubs[characteristicId]?.cancel();
       _platformSubs[characteristicId] = c.onValueReceived.listen((bytes) {
         if (!controller.isClosed) {
           controller.add(Uint8List.fromList(bytes));
         }
       });
+    }).catchError((e) {
+      if (!controller.isClosed) {
+        controller.addError(e);
+      }
     });
 
     return controller.stream;

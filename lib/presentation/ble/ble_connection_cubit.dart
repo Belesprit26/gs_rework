@@ -15,6 +15,8 @@ import '../../domain/provisioning/provisioning_status.dart';
 
 part 'ble_connection_state.dart';
 
+const _sentinel = Object();
+
 /// Manages the full BLE lifecycle: scan, pair, connect, reconnect.
 ///
 /// Persists the paired device ID via [PrefsManager] so that the app

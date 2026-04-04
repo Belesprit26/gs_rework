@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_it/get_it.dart';
 
 import '../data/firebase/config/geyser_config_repository.dart';
@@ -55,6 +56,7 @@ void registerPresentation(GetIt getIt) {
     () => DeviceStatsCubit(
       rtdbRepository: getIt<RtdbRepository>(),
       configRepository: getIt<GeyserConfigRepository>(),
+      firebaseAuth: getIt<FirebaseAuth>(),
       deviceId: 'g1',
     ),
   );
