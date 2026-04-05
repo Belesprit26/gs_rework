@@ -12,6 +12,7 @@ import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/entities/scanned_device.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/provisioning/provisioning_status.dart';
+import '../device/device_registry_cubit.dart';
 
 part 'ble_connection_state.dart';
 
@@ -29,9 +30,11 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   BleConnectionCubit({
     required BleRepository bleRepository,
     required PrefsManager prefsManager,
+    required DeviceRegistryCubit deviceRegistry,
     Connectivity? connectivity,
   })  : _ble = bleRepository,
         _prefs = prefsManager,
+        _registry = deviceRegistry,
         _connectivity = connectivity ?? Connectivity(),
         super(BleConnectionState(
           isBluetoothOn: bleRepository.isAdapterOn,
@@ -45,6 +48,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
 
   final BleRepository _ble;
   final PrefsManager _prefs;
+  final DeviceRegistryCubit _registry;
   final Connectivity _connectivity;
   StreamSubscription<BleConnectionStatus>? _statusSub;
   StreamSubscription<bool>? _adapterSub;
@@ -272,13 +276,20 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
         debugPrint('[BLE] Legacy device — mapped $bleMac → "g1"');
       }
 
-      // Persist the nickname so the device registry can show it
-      // even when BLE is disconnected.
-      if (bleMac != null && nickname != null && nickname.isNotEmpty) {
-        final rtdbId = _prefs.getRtdbDeviceId(bleMac);
-        if (rtdbId != null) {
-          await _prefs.setDeviceNickname(rtdbId, nickname);
-        }
+      // Persist the nickname and update the live device registry so
+      // multi-device PageView stays current without needing an app restart.
+      if (bleMac != null) {
+        final rtdbId = _prefs.getRtdbDeviceId(bleMac)!;
+        final nick = (nickname != null && nickname.isNotEmpty)
+            ? nickname
+            : 'My Geyser';
+        await _prefs.setDeviceNickname(rtdbId, nick);
+
+        _registry.addDevice(DeviceInfo(
+          rtdbDeviceId: rtdbId,
+          bleMac: bleMac,
+          nickname: nick,
+        ));
       }
 
       debugPrint('[BLE] Device info: nick="$nickname", '

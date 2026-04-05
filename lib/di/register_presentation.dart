@@ -30,6 +30,7 @@ void registerPresentation(GetIt getIt) {
     () => BleConnectionCubit(
       bleRepository: getIt<BleRepository>(),
       prefsManager: getIt<PrefsManager>(),
+      deviceRegistry: getIt<DeviceRegistryCubit>(),
     ),
   );
 
