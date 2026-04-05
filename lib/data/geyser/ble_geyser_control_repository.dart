@@ -89,8 +89,8 @@ class BleGeyserControlRepository implements GeyserControlRepository {
     await _ble.writeCharacteristic(
       GattUuids.tempLimits.str,
       Uint8List.fromList([
-        min.clamp(0, 255),
-        max.clamp(0, 255),
+        min.clamp(5, 50),
+        max.clamp(51, 65),
         autoReheat ? 1 : 0,
       ]),
     );
