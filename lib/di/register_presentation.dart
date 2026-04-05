@@ -14,6 +14,7 @@ import '../presentation/auth/auth_gate/auth_gate_cubit.dart';
 import '../presentation/auth/login/login_bloc.dart';
 import '../presentation/auth/sign_up/sign_up_bloc.dart';
 import '../presentation/ble/ble_connection_cubit.dart';
+import '../presentation/device/device_registry_cubit.dart';
 import '../presentation/geyser/geyser_control_cubit.dart';
 import '../presentation/notifications/notification_service.dart';
 import '../presentation/provisioning/provisioning_cubit.dart';
@@ -35,11 +36,18 @@ void registerPresentation(GetIt getIt) {
   // Geyser control — singleton, listens to BLE status + streams.
   // The RTDB repository enables remote mode when BLE is disconnected.
   getIt.registerLazySingleton<GeyserControlCubit>(
-    () => GeyserControlCubit(
-      geyserControlRepository: getIt<GeyserControlRepository>(),
-      bleRepository: getIt<BleRepository>(),
-      rtdbRepository: getIt<RtdbRepository>(),
-    ),
+    () {
+      final prefs = getIt<PrefsManager>();
+      final bleMac = prefs.pairedDeviceId;
+      final rtdbId = bleMac != null ? prefs.getRtdbDeviceId(bleMac) : null;
+
+      return GeyserControlCubit(
+        geyserControlRepository: getIt<GeyserControlRepository>(),
+        bleRepository: getIt<BleRepository>(),
+        rtdbRepository: getIt<RtdbRepository>(),
+        deviceId: rtdbId ?? 'g1',
+      );
+    },
   );
 
   // Provisioning — factory (each session creates a fresh cubit)
@@ -48,17 +56,30 @@ void registerPresentation(GetIt getIt) {
       provisioningRepository: getIt<BleProvisioningRepository>(),
       authRepository: getIt<AuthRepository>(),
       bleRepository: getIt<BleRepository>(),
+      prefsManager: getIt<PrefsManager>(),
+      deviceRegistry: getIt<DeviceRegistryCubit>(),
     ),
   );
 
   // Device stats — singleton, streams daily stats + user config
   getIt.registerLazySingleton<DeviceStatsCubit>(
-    () => DeviceStatsCubit(
-      rtdbRepository: getIt<RtdbRepository>(),
-      configRepository: getIt<GeyserConfigRepository>(),
-      firebaseAuth: getIt<FirebaseAuth>(),
-      deviceId: 'g1',
-    ),
+    () {
+      final prefs = getIt<PrefsManager>();
+      final bleMac = prefs.pairedDeviceId;
+      final rtdbId = bleMac != null ? prefs.getRtdbDeviceId(bleMac) : null;
+
+      return DeviceStatsCubit(
+        rtdbRepository: getIt<RtdbRepository>(),
+        configRepository: getIt<GeyserConfigRepository>(),
+        firebaseAuth: getIt<FirebaseAuth>(),
+        deviceId: rtdbId ?? 'g1',
+      );
+    },
+  );
+
+  // Device registry — singleton, tracks all known devices + selection
+  getIt.registerLazySingleton<DeviceRegistryCubit>(
+    () => DeviceRegistryCubit(prefsManager: getIt<PrefsManager>()),
   );
 
   // Notification service — singleton, manages BLE event subscriptions

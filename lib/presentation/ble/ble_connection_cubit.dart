@@ -258,11 +258,28 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
         deviceNickname: nickname,
         isWifiProvisioned: isWifi,
         wifiSsid: ssid,
-        // Update the paired device name with nickname if available.
         pairedDeviceName: nickname != null && nickname.isNotEmpty
             ? 'GeyserSwitch-$nickname'
             : state.pairedDeviceName,
       ));
+
+      // Ensure we have an RTDB device ID mapping for this device.
+      // Pre-existing units (provisioned before multi-device) won't have
+      // a mapping yet — auto-assign 'g1' so they continue working.
+      final bleMac = state.pairedDeviceId;
+      if (bleMac != null && _prefs.getRtdbDeviceId(bleMac) == null) {
+        await _prefs.setRtdbDeviceId(bleMac, 'g1');
+        debugPrint('[BLE] Legacy device — mapped $bleMac → "g1"');
+      }
+
+      // Persist the nickname so the device registry can show it
+      // even when BLE is disconnected.
+      if (bleMac != null && nickname != null && nickname.isNotEmpty) {
+        final rtdbId = _prefs.getRtdbDeviceId(bleMac);
+        if (rtdbId != null) {
+          await _prefs.setDeviceNickname(rtdbId, nickname);
+        }
+      }
 
       debugPrint('[BLE] Device info: nick="$nickname", '
           'wifi=$isWifi, ssid="$ssid", prov=$provStatus');

@@ -82,4 +82,63 @@ class PrefsManager {
   /// Whether at least one notification type is enabled.
   bool get anyNotificationEnabled =>
       NotificationType.values.any(isNotificationTypeEnabled);
+
+  // ── Device ID Mapping ────────────────────────────────────────────
+  //
+  // Maps BLE MAC/UUID to RTDB device IDs.  Each physical device gets
+  // a deterministic RTDB ID derived from its MAC at provisioning.
+  // Key format: "rtdb_did_{sanitised_ble_mac}"
+
+  static const _kRtdbDidPrefix = 'rtdb_did_';
+
+  /// Get the RTDB device ID for a given BLE MAC.  Returns null if
+  /// this device hasn't been provisioned through this app.
+  String? getRtdbDeviceId(String bleMac) {
+    final key = '$_kRtdbDidPrefix${_sanitiseMac(bleMac)}';
+    return _prefs.getString(key);
+  }
+
+  /// Store the RTDB device ID for a BLE MAC after provisioning.
+  Future<void> setRtdbDeviceId(String bleMac, String rtdbDeviceId) async {
+    final key = '$_kRtdbDidPrefix${_sanitiseMac(bleMac)}';
+    await _prefs.setString(key, rtdbDeviceId);
+  }
+
+  /// List all known RTDB device IDs (for building the device list).
+  List<String> getAllRtdbDeviceIds() {
+    return _prefs
+        .getKeys()
+        .where((k) => k.startsWith(_kRtdbDidPrefix))
+        .map((k) => _prefs.getString(k)!)
+        .toList();
+  }
+
+  /// Returns all (bleMac → rtdbDeviceId) pairs for building the registry.
+  Map<String, String> getAllDeviceMappings() {
+    final map = <String, String>{};
+    for (final key in _prefs.getKeys()) {
+      if (key.startsWith(_kRtdbDidPrefix)) {
+        final mac = key.substring(_kRtdbDidPrefix.length).replaceAll('_', ':');
+        map[mac] = _prefs.getString(key)!;
+      }
+    }
+    return map;
+  }
+
+  static String _sanitiseMac(String mac) => mac.replaceAll(':', '_');
+
+  // ── Device Nicknames ─────────────────────────────────────────────
+  //
+  // Persists the user-visible nickname for each device so the
+  // DeviceRegistry can display it even when BLE is disconnected.
+
+  static const _kDeviceNickPrefix = 'dev_nick_';
+
+  String? getDeviceNickname(String rtdbDeviceId) {
+    return _prefs.getString('$_kDeviceNickPrefix$rtdbDeviceId');
+  }
+
+  Future<void> setDeviceNickname(String rtdbDeviceId, String nickname) async {
+    await _prefs.setString('$_kDeviceNickPrefix$rtdbDeviceId', nickname);
+  }
 }

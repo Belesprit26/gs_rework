@@ -1,0 +1,81 @@
+import 'package:equatable/equatable.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../data/local/prefs_manager.dart';
+
+part 'device_registry_state.dart';
+
+/// Manages the list of known devices and which one is selected.
+///
+/// Populated from [PrefsManager] on startup.  New devices are added
+/// after provisioning.  The selected device drives which RTDB paths
+/// [GeyserControlCubit] and [DeviceStatsCubit] subscribe to.
+class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
+  DeviceRegistryCubit({required PrefsManager prefsManager})
+      : _prefs = prefsManager,
+        super(const DeviceRegistryState()) {
+    load();
+  }
+
+  final PrefsManager _prefs;
+
+  /// Load all known devices from SharedPreferences.
+  void load() {
+    final mappings = _prefs.getAllDeviceMappings();
+    if (mappings.isEmpty) return;
+
+    final devices = mappings.entries.map((e) {
+      final rtdbId = e.value;
+      return DeviceInfo(
+        rtdbDeviceId: rtdbId,
+        bleMac: e.key,
+        nickname: _prefs.getDeviceNickname(rtdbId) ?? 'My Geyser',
+      );
+    }).toList();
+
+    emit(state.copyWith(devices: devices, selectedIndex: 0));
+  }
+
+  /// Add a newly provisioned device to the registry.
+  void addDevice(DeviceInfo device) {
+    final existing = state.devices.indexWhere(
+      (d) => d.rtdbDeviceId == device.rtdbDeviceId,
+    );
+
+    if (existing >= 0) {
+      // Re-provisioned same device — update nickname.
+      final updated = List<DeviceInfo>.of(state.devices);
+      updated[existing] = device;
+      emit(state.copyWith(devices: updated, selectedIndex: existing));
+    } else {
+      final updated = [...state.devices, device];
+      emit(state.copyWith(
+        devices: updated,
+        selectedIndex: updated.length - 1,
+      ));
+    }
+  }
+
+  /// Change the selected device (e.g. from PageView swipe).
+  void selectDevice(int index) {
+    if (index < 0 || index >= state.devices.length) return;
+    if (index == state.selectedIndex) return;
+    emit(state.copyWith(selectedIndex: index));
+  }
+
+  /// Update the nickname for a device (e.g. after BLE read or rename).
+  void updateNickname(String rtdbDeviceId, String nickname) {
+    final idx = state.devices.indexWhere(
+      (d) => d.rtdbDeviceId == rtdbDeviceId,
+    );
+    if (idx < 0) return;
+
+    final updated = List<DeviceInfo>.of(state.devices);
+    updated[idx] = DeviceInfo(
+      rtdbDeviceId: rtdbDeviceId,
+      bleMac: updated[idx].bleMac,
+      nickname: nickname,
+    );
+    emit(state.copyWith(devices: updated));
+  }
+}

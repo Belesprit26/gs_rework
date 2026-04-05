@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 import '../../data/firebase/config/geyser_config_repository.dart';
 import '../../data/local/prefs_manager.dart';
@@ -12,6 +13,7 @@ import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/notifications/entities/device_notification.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
+import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
@@ -48,7 +50,31 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GS Rework'),
+        title: BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
+          builder: (context, regState) {
+            if (!regState.isMultiDevice) {
+              return const Text('GS Rework');
+            }
+            final device = regState.selectedDevice;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('GS Rework', style: TextStyle(fontSize: 16)),
+                Text(
+                  device?.nickname ?? 'Geyser',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
         actions: [
           const _NotificationBell(),
           IconButton(
@@ -117,24 +143,104 @@ class _DashboardPageState extends State<DashboardPage> {
 
 // ── Home tab ────────────────────────────────────────────────────────
 
-class _HomeTab extends StatelessWidget {
+class _HomeTab extends StatefulWidget {
   const _HomeTab();
 
   @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    final registry = context.read<DeviceRegistryCubit>();
+    _pageController = PageController(initialPage: registry.state.selectedIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onPageChanged(int index) {
+    final registry = context.read<DeviceRegistryCubit>();
+    registry.selectDevice(index);
+
+    final device = registry.state.devices[index];
+    context.read<GeyserControlCubit>().switchDevice(device.rtdbDeviceId);
+    context.read<DeviceStatsCubit>().switchDevice(device.rtdbDeviceId);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Get the device nickname for the focal card label.
+    return BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
+      builder: (context, regState) {
+        if (!regState.isMultiDevice) {
+          return const _SingleDeviceHome();
+        }
+
+        return Column(
+          children: [
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: regState.devices.length,
+                onPageChanged: _onPageChanged,
+                itemBuilder: (context, index) {
+                  final device = regState.devices[index];
+                  return _SingleDeviceHome(
+                    deviceNicknameOverride: device.nickname,
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, top: 4),
+              child: SmoothPageIndicator(
+                controller: _pageController,
+                count: regState.devices.length,
+                effect: WormEffect(
+                  dotHeight: 8,
+                  dotWidth: 8,
+                  spacing: 8,
+                  activeDotColor: Theme.of(context).colorScheme.primary,
+                  dotColor: Colors.grey.shade300,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The actual dashboard content for a single device.
+///
+/// Used directly when there's only one device, or as a page inside
+/// the [PageView] when there are multiple devices.
+class _SingleDeviceHome extends StatelessWidget {
+  const _SingleDeviceHome({this.deviceNicknameOverride});
+
+  final String? deviceNicknameOverride;
+
+  @override
+  Widget build(BuildContext context) {
     final bleState = context.watch<BleConnectionCubit>().state;
-    final nickname = bleState.deviceNickname;
-    final geyserLabel = (nickname != null && nickname.isNotEmpty)
-        ? nickname
-        : 'Geyser';
+    final nickname = deviceNicknameOverride ??
+        bleState.deviceNickname ??
+        'Geyser';
+    final geyserLabel = nickname.isNotEmpty ? nickname : 'Geyser';
 
     return BlocConsumer<GeyserControlCubit, GeyserControlState>(
       listenWhen: (prev, curr) =>
           prev.snapshot.isOn != curr.snapshot.isOn ||
           prev.error != curr.error,
       listener: (context, state) {
-        // ── Snackbar feedback on toggle ────────────────────────
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -148,7 +254,6 @@ class _HomeTab extends StatelessWidget {
       builder: (context, state) {
         final snap = state.snapshot;
 
-        // Build timer subtitle.
         final enabledTimers = snap.timers.where((t) => t.enabled).toList();
         final timerSubtitle = enabledTimers.isEmpty
             ? 'No timers active'
@@ -157,7 +262,6 @@ class _HomeTab extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            // ── Focal card ───────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 46),
               child: GeyserFocalCard(
@@ -172,11 +276,9 @@ class _HomeTab extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // ── Mode / connectivity banner ───────────────────────
             const _ModeBanner(),
             const SizedBox(height: 12),
 
-            // ── Section label ────────────────────────────────────
             Text(
               'Geyser Stats',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -185,7 +287,6 @@ class _HomeTab extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // ── Stat tiles ───────────────────────────────────────
             StatTile(
               icon: Icons.thermostat_outlined,
               title: 'Temperature Range',
@@ -207,11 +308,9 @@ class _HomeTab extends StatelessWidget {
               subtitle: snap.firmwareVersion ?? '–',
             ),
 
-            // ── Daily usage stats ────────────────────────────────
             const SizedBox(height: 16),
             const StatsCard(),
 
-            // ── Error banner ─────────────────────────────────────
             if (state.error != null) ...[
               const SizedBox(height: 12),
               Text(

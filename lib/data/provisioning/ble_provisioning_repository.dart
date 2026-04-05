@@ -102,7 +102,7 @@ class BleProvisioningRepository {
     String? wifiSsid,
     String? wifiPassword,
     String? refreshToken,
-    String deviceId = 'g1',
+    required String deviceId,
   }) async {
     // 1. Subscribe to status first, so we don't miss notifications.
     listenToStatus();

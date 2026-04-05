@@ -30,7 +30,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     required GeyserControlRepository geyserControlRepository,
     required BleRepository bleRepository,
     RtdbRepository? rtdbRepository,
-    String deviceId = 'g1',
+    required String deviceId,
   })  : _geyser = geyserControlRepository,
         _ble = bleRepository,
         _rtdb = rtdbRepository,
@@ -49,7 +49,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   final GeyserControlRepository _geyser;
   final BleRepository _ble;
   final RtdbRepository? _rtdb;
-  final String _deviceId;
+  String _deviceId;
 
   StreamSubscription<BleConnectionStatus>? _bleSub;
   StreamSubscription<double>? _tempSub;
@@ -190,6 +190,30 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
       await _fetchRemoteSnapshot();
     } else {
       await _fetchInitialSnapshot();
+    }
+  }
+
+  /// Switch to monitoring/controlling a different device.
+  ///
+  /// Cancels existing RTDB subscriptions and re-subscribes with the
+  /// new device ID.  BLE streams are unaffected — they are tied to
+  /// the physically connected device (which may or may not be this one).
+  void switchDevice(String deviceId) {
+    if (isClosed || _deviceId == deviceId) return;
+    _liveSub?.cancel();
+    _settingsSub?.cancel();
+    _heartbeat?.cancel();
+    _deviceId = deviceId;
+
+    emit(state.copyWith(
+      snapshot: const GeyserSnapshot(),
+      isLoading: true,
+      error: null,
+      deviceLastSeen: null,
+    ));
+
+    if (_useRemote) {
+      _startRemoteSync();
     }
   }
 

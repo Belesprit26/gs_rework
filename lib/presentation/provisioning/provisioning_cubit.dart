@@ -7,10 +7,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
 import '../../core/ble/gatt_uuids.dart';
+import '../../core/utils/device_id_generator.dart';
+import '../../data/local/prefs_manager.dart';
 import '../../data/provisioning/ble_provisioning_repository.dart';
 import '../../domain/auth/repositories/auth_repository.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/provisioning/provisioning_status.dart';
+import '../device/device_registry_cubit.dart';
 
 part 'provisioning_state.dart';
 
@@ -26,14 +29,20 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
     required BleProvisioningRepository provisioningRepository,
     required AuthRepository authRepository,
     required BleRepository bleRepository,
+    required PrefsManager prefsManager,
+    required DeviceRegistryCubit deviceRegistry,
   })  : _prov = provisioningRepository,
         _auth = authRepository,
         _ble = bleRepository,
+        _prefs = prefsManager,
+        _registry = deviceRegistry,
         super(const ProvisioningState());
 
   final BleProvisioningRepository _prov;
   final AuthRepository _auth;
   final BleRepository _ble;
+  final PrefsManager _prefs;
+  final DeviceRegistryCubit _registry;
   StreamSubscription<ProvisioningStatus>? _statusSub;
   Timer? _timeout;
 
@@ -217,13 +226,35 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
         debugPrint('[Prov] WiFi not enabled — skipping Firebase auth');
       }
 
+      final bleMac = _ble.connectedDeviceId;
+      final deviceId = bleMac != null ? deriveDeviceId(bleMac) : 'g1';
+      if (bleMac == null) {
+        debugPrint('[Prov] WARNING: connectedDeviceId is null — '
+            'falling back to device ID "g1"');
+      }
+
       await _prov.provision(
         deviceNickname: state.deviceNickname,
         firebaseUid: state.firebaseUid ?? 'unknown',
+        deviceId: deviceId,
         wifiSsid: sendWifi ? state.ssid : null,
         wifiPassword: sendWifi ? state.wifiPassword : null,
         refreshToken: refreshToken,
       );
+
+      if (bleMac != null) {
+        await _prefs.setRtdbDeviceId(bleMac, deviceId);
+        final nick = state.deviceNickname.isNotEmpty
+            ? state.deviceNickname
+            : 'My Geyser';
+        await _prefs.setDeviceNickname(deviceId, nick);
+
+        _registry.addDevice(DeviceInfo(
+          rtdbDeviceId: deviceId,
+          bleMac: bleMac,
+          nickname: nick,
+        ));
+      }
     } catch (e) {
       emit(state.copyWith(
         step: ProvisioningStep.result,
