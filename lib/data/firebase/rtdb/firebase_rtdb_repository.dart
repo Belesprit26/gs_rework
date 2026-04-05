@@ -133,8 +133,8 @@ class FirebaseRtdbRepository implements RtdbRepository {
   }
 
   @override
-  Future<DateTime?> getLastBoot() async {
-    final snap = await _userRef().child('meta/boot').get();
+  Future<DateTime?> getLastBoot(String deviceId) async {
+    final snap = await _userRef().child('meta/$deviceId/boot').get();
     if (!snap.exists || snap.value == null) return null;
     final epoch = (snap.value as num).toInt();
     return DateTime.fromMillisecondsSinceEpoch(epoch * 1000);

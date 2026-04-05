@@ -32,6 +32,6 @@ abstract class RtdbRepository {
   /// Write "last app open" timestamp to meta/app.
   Future<void> touchAppActive();
 
-  /// Read last boot time (epoch ms).
-  Future<DateTime?> getLastBoot();
+  /// Read last boot time for a device (epoch seconds from firmware).
+  Future<DateTime?> getLastBoot(String deviceId);
 }

@@ -54,7 +54,7 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
     });
 
     try {
-      final boot = await _rtdb.getLastBoot();
+      final boot = await _rtdb.getLastBoot(_deviceId);
       if (isClosed) return;
       emit(state.copyWith(lastBoot: boot));
     } catch (_) {}
@@ -76,11 +76,17 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
   }
 
   /// Switch to a different device's stats (multi-device swipe).
-  void switchDevice(String deviceId) {
+  void switchDevice(String deviceId) async {
     if (isClosed) return;
     _deviceId = deviceId;
-    emit(state.copyWith(stats: const DailyStats()));
+    emit(state.copyWith(stats: const DailyStats(), lastBoot: null));
     _startStatsStream();
+
+    try {
+      final boot = await _rtdb.getLastBoot(_deviceId);
+      if (isClosed) return;
+      emit(state.copyWith(lastBoot: boot));
+    } catch (_) {}
   }
 
   static String _today() {

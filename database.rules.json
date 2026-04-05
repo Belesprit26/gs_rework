@@ -66,12 +66,14 @@
         },
 
         "meta": {
-          "boot":            { ".validate": "newData.isNumber()" },
           "app":             { ".validate": "newData.val() === now" },
           "offlineNotified": {
             "$did": { ".validate": "newData.isBoolean()" }
           },
-          "$other":          { ".validate": false }
+          "$did": {
+            "boot":   { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
         },
 
         "$other": { ".validate": false }
