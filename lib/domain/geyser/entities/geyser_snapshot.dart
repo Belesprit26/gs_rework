@@ -13,9 +13,10 @@ class GeyserSnapshot extends Equatable {
     this.autoReheat = false,
     this.timers = const [],
     this.firmwareVersion,
+    this.maxOnMinutes = 240,
   });
 
-  /// Current water temperature in °C.
+  /// Current water temperature in °C.  Negative means sensor offline.
   final double temperature;
 
   /// Whether the geyser heating element is active.
@@ -37,6 +38,14 @@ class GeyserSnapshot extends Equatable {
   /// Firmware version string from the ESP32 (e.g. "0.2.0").
   final String? firmwareVersion;
 
+  /// Max continuous relay-ON time in minutes (0 = disabled, default 240).
+  final int maxOnMinutes;
+
+  /// True when the firmware reports the temperature sensor is unresponsive.
+  /// The sentinel value -1 is only pushed by the firmware itself after
+  /// confirmed sensor failure with rediscovery attempts exhausted.
+  bool get isSensorOffline => temperature < 0;
+
   GeyserSnapshot copyWith({
     double? temperature,
     bool? isOn,
@@ -45,6 +54,7 @@ class GeyserSnapshot extends Equatable {
     bool? autoReheat,
     List<GeyserTimer>? timers,
     String? firmwareVersion,
+    int? maxOnMinutes,
   }) {
     return GeyserSnapshot(
       temperature: temperature ?? this.temperature,
@@ -54,6 +64,7 @@ class GeyserSnapshot extends Equatable {
       autoReheat: autoReheat ?? this.autoReheat,
       timers: timers ?? this.timers,
       firmwareVersion: firmwareVersion ?? this.firmwareVersion,
+      maxOnMinutes: maxOnMinutes ?? this.maxOnMinutes,
     );
   }
 
@@ -66,6 +77,7 @@ class GeyserSnapshot extends Equatable {
         autoReheat,
         timers,
         firmwareVersion,
+        maxOnMinutes,
       ];
 }
 

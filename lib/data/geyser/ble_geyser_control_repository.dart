@@ -46,6 +46,7 @@ class BleGeyserControlRepository implements GeyserControlRepository {
       _ble.readCharacteristic(GattUuids.tempLimits.str),
       _ble.readCharacteristic(GattUuids.timerConfig.str),
       _ble.readCharacteristic(GattUuids.deviceInfo.str),
+      _readMaxOnSafe(),
     ]);
 
     final limitsBytes = results[2];
@@ -58,8 +59,19 @@ class BleGeyserControlRepository implements GeyserControlRepository {
       autoReheat: limitsBytes.length > 2 ? limitsBytes[2] == 1 : false,
       timers: _decodeTimers(results[3]),
       firmwareVersion: utf8.decode(results[4]),
+      maxOnMinutes: _decodeMaxOn(results[5]),
     );
     return _lastSnapshot;
+  }
+
+  /// Read max-on timer, returning empty bytes if the characteristic
+  /// is absent (older firmware without 0x0D).
+  Future<Uint8List> _readMaxOnSafe() async {
+    try {
+      return await _ble.readCharacteristic(GattUuids.maxOnTimer.str);
+    } catch (_) {
+      return Uint8List(0);
+    }
   }
 
   // ── Streams ───────────────────────────────────────────────────────
@@ -126,6 +138,15 @@ class BleGeyserControlRepository implements GeyserControlRepository {
     );
   }
 
+  @override
+  Future<void> setMaxOnTimer(int minutes) async {
+    final bd = ByteData(2)..setUint16(0, minutes, Endian.little);
+    await _ble.writeCharacteristic(
+      GattUuids.maxOnTimer.str,
+      bd.buffer.asUint8List(),
+    );
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   @override
@@ -179,6 +200,13 @@ class BleGeyserControlRepository implements GeyserControlRepository {
   static bool _decodeGeyserState(Uint8List bytes) {
     if (bytes.isEmpty) return false;
     return bytes[0] == 0x01;
+  }
+
+  /// Decode uint16 LE max-on minutes (0 = disabled).
+  static int _decodeMaxOn(Uint8List bytes) {
+    if (bytes.length < 2) return 240;
+    final bd = ByteData.sublistView(bytes);
+    return bd.getUint16(0, Endian.little);
   }
 
   /// Decode N × 4-byte timer entries [is_preset, enabled, hour, minute].

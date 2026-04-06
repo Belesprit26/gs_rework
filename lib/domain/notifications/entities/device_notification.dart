@@ -20,6 +20,15 @@ enum NotificationType {
   /// Alert: temperature dropped to min limit (auto-reheat disabled).
   minTempAlert(0x03, 'Min Temp Alert'),
 
+  /// Temperature sensor is unresponsive or disconnected.
+  sensorFail(0x04, 'Sensor Offline'),
+
+  /// Temperature sensor recovered after a failure.
+  sensorRecover(0x05, 'Sensor Recovered'),
+
+  /// Relay forced OFF after exceeding max continuous run time.
+  maxOnTimeout(0x06, 'Max-On Safety Off'),
+
   /// Unrecognised event code from firmware.
   unknown(0x00, 'Unknown Event');
 
@@ -96,6 +105,12 @@ class DeviceNotification extends Equatable {
         return 'Geyser turned on — temp dropped to $temperature°C';
       case NotificationType.minTempAlert:
         return 'Temperature dropped to $temperature°C — auto-reheat is off';
+      case NotificationType.sensorFail:
+        return 'Temperature sensor is not responding — geyser runs normally';
+      case NotificationType.sensorRecover:
+        return 'Temperature sensor is back online ($temperature°C)';
+      case NotificationType.maxOnTimeout:
+        return 'Geyser turned off — exceeded max continuous run time';
       case NotificationType.unknown:
         return 'Unknown event at $temperature°C';
     }

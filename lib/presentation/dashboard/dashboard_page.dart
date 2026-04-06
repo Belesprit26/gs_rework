@@ -285,6 +285,8 @@ class _SingleDeviceHome extends StatelessWidget {
                 isBusy: state.isBusy,
                 onToggle: () =>
                     context.read<GeyserControlCubit>().toggleGeyser(),
+                onSensorOfflineTap: () =>
+                    _showSensorOfflineInfo(context),
               ),
             ),
             const SizedBox(height: 12),
@@ -303,9 +305,13 @@ class _SingleDeviceHome extends StatelessWidget {
             StatTile(
               icon: Icons.thermostat_outlined,
               title: 'Temperature Range',
-              subtitle: '${snap.minTemp}°C – ${snap.maxTemp}°C'
-                  '${snap.autoReheat ? ' (auto-reheat)' : ''}',
-              onTap: () => _showTempLimitsDialog(context, snap),
+              subtitle: snap.isSensorOffline
+                  ? 'Sensor offline — limits paused'
+                  : '${snap.minTemp}°C – ${snap.maxTemp}°C'
+                      '${snap.autoReheat ? ' (auto-reheat)' : ''}',
+              onTap: snap.isSensorOffline
+                  ? null
+                  : () => _showTempLimitsDialog(context, snap),
             ),
             const SizedBox(height: 8),
             StatTile(
@@ -445,6 +451,41 @@ class _SingleDeviceHome extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  // ── Sensor offline info dialog ────────────────────────────────────
+
+  void _showSensorOfflineInfo(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.sensors_off, color: Colors.orange.shade600),
+            const SizedBox(width: 8),
+            const Text('Sensor Offline'),
+          ],
+        ),
+        content: const Text(
+          'The temperature sensor is not responding. '
+          'This could mean the sensor cable is disconnected or damaged.\n\n'
+          'While the sensor is offline:\n'
+          '\u2022 Your geyser will continue to operate normally using '
+          'its built-in thermostat\n'
+          '\u2022 Temperature-based controls (limits, auto-reheat) '
+          'are paused until the sensor recovers\n'
+          '\u2022 The power toggle still works\n\n'
+          'If this persists, check the sensor cable connection '
+          'on the GeyserSwitch unit.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
+        ],
       ),
     );
   }
@@ -1204,6 +1245,12 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Colors.green;
       case NotificationType.minTempAlert:
         return Colors.orange;
+      case NotificationType.sensorFail:
+        return Colors.orange;
+      case NotificationType.sensorRecover:
+        return Colors.teal;
+      case NotificationType.maxOnTimeout:
+        return Colors.deepOrange;
       case NotificationType.unknown:
         return Colors.grey;
     }
@@ -1217,6 +1264,12 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Icons.local_fire_department;
       case NotificationType.minTempAlert:
         return Icons.warning_amber_rounded;
+      case NotificationType.sensorFail:
+        return Icons.sensors_off;
+      case NotificationType.sensorRecover:
+        return Icons.sensors;
+      case NotificationType.maxOnTimeout:
+        return Icons.timer_off_outlined;
       case NotificationType.unknown:
         return Icons.help_outline;
     }
@@ -1230,6 +1283,12 @@ class _NotificationTypeToggle extends StatelessWidget {
         return 'When geyser auto-turns on at min temp';
       case NotificationType.minTempAlert:
         return 'When temp drops to min (auto-reheat off)';
+      case NotificationType.sensorFail:
+        return 'When the temperature sensor stops responding';
+      case NotificationType.sensorRecover:
+        return 'When the temperature sensor comes back online';
+      case NotificationType.maxOnTimeout:
+        return 'When geyser forced off after max continuous run';
       case NotificationType.unknown:
         return 'Unknown event type';
     }

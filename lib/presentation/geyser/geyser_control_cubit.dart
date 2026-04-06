@@ -184,6 +184,26 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     }
   }
 
+  /// Set the max continuous relay-ON time in minutes (0 = disabled).
+  Future<void> setMaxOnTimer(int minutes) async {
+    if (isClosed) return;
+    emit(state.copyWith(error: null));
+    try {
+      if (_useRemote) {
+        await _rtdb!.writeSettings(_deviceId, {'maxon': minutes});
+      } else {
+        await _geyser.setMaxOnTimer(minutes);
+      }
+      if (isClosed) return;
+      emit(state.copyWith(
+        snapshot: state.snapshot.copyWith(maxOnMinutes: minutes),
+      ));
+    } catch (e) {
+      if (isClosed) return;
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
   /// Force-refresh the full snapshot from the device.
   Future<void> refreshSnapshot() async {
     if (_useRemote) {
@@ -258,6 +278,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
           maxTemp: settings.maxTemp,
           autoReheat: settings.autoReheat,
           timers: _timersFromSettings(settings),
+          maxOnMinutes: settings.maxOnMinutes,
         ),
       ));
     });
@@ -306,6 +327,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
           maxTemp: settings.maxTemp,
           autoReheat: settings.autoReheat,
           timers: _timersFromSettings(settings),
+          maxOnMinutes: settings.maxOnMinutes,
         ),
       ));
     } catch (e) {

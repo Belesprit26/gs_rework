@@ -16,6 +16,7 @@ class GeyserFocalCard extends StatelessWidget {
     required this.onToggle,
     this.isLoading = false,
     this.isBusy = false,
+    this.onSensorOfflineTap,
   });
 
   /// Display name of the geyser (e.g. "Buti").
@@ -24,7 +25,7 @@ class GeyserFocalCard extends StatelessWidget {
   /// Whether the geyser element is currently on.
   final bool isOn;
 
-  /// Current sensor temperature in °C.
+  /// Current sensor temperature in °C.  Negative means sensor offline.
   final double temperature;
 
   /// Whether the initial data is still loading.
@@ -35,6 +36,9 @@ class GeyserFocalCard extends StatelessWidget {
 
   /// Called when the user taps the power toggle.
   final VoidCallback onToggle;
+
+  /// Called when the user taps the "?" sensor-offline indicator.
+  final VoidCallback? onSensorOfflineTap;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +77,7 @@ class GeyserFocalCard extends StatelessWidget {
             temperature: temperature,
             isLoading: isLoading,
             size: 170,
+            onSensorOfflineTap: onSensorOfflineTap,
           ),
           const SizedBox(height: 20),
 

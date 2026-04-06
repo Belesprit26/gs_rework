@@ -44,6 +44,9 @@ abstract class GeyserControlRepository {
   /// Called once per BLE connection cycle for time synchronisation.
   Future<void> pushPhoneTime();
 
+  /// Set the max continuous relay-ON time in minutes (0 = disabled).
+  Future<void> setMaxOnTimer(int minutes);
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   /// Start listening for notifications (call after BLE is ready).

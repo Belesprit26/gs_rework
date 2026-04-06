@@ -91,4 +91,8 @@ abstract final class GattUuids {
   /// app reads this to recover the existing RTDB mapping instead of
   /// creating a new device ID.
   static final storedDeviceId = Guid('4753000c-7652-4543-b201-c4b801a6c700');
+
+  /// Max-on safety timer — Read, Write (encrypted).
+  /// Format: uint16 LE — minutes (0 = disabled).
+  static final maxOnTimer = Guid('4753000d-7652-4543-b201-c4b801a6c700');
 }

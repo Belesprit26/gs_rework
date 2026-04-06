@@ -117,6 +117,18 @@ const EVENT_LABELS = {
     title: "Low temperature alert",
     body: (t) => `Temp dropped to ${t}°C — auto-reheat is off`,
   },
+  4: {
+    title: "Sensor offline",
+    body: () => "Temperature sensor is not responding — geyser runs normally",
+  },
+  5: {
+    title: "Sensor recovered",
+    body: (t) => `Temperature sensor is back online (${t}°C)`,
+  },
+  6: {
+    title: "Max-on safety off",
+    body: () => "Geyser turned off — exceeded max continuous run time",
+  },
 };
 
 exports.onDeviceEvent = onValueWritten("gs/{uid}/events/{did}", async (event) => {
@@ -288,21 +300,38 @@ async function sendPushToAllTokens(uid, { title, body, data }) {
 
 // ── GeyserSwitch_Orange compatibility ────────────────────────────
 //
-// The legacy GeyserSwitch_Orange app calls httpsCallable('sendNotification')
-// with { tokens, title, body, data }.  This function must remain deployed
-// as long as that app version is in the field.
+// @deprecated — Legacy GeyserSwitch_Orange calls this.
+// Keep deployed until all legacy app installs are replaced.
+// Usage is tracked in Cloud Functions logs for monitoring.
 
 exports.sendNotification = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in");
   }
 
+  const uid = request.auth.uid;
   const { tokens, title, body, data } = request.data;
   if (!tokens || !Array.isArray(tokens) || !title || !body) {
     throw new HttpsError("invalid-argument", "tokens, title, and body required");
   }
 
-  console.log(`sendNotification: uid=${request.auth.uid}, tokens=${tokens.length}, title="${title}"`);
+  console.warn(`[DEPRECATED] sendNotification called by uid=${uid}, tokens=${tokens.length}`);
+
+  // Server-side token ownership: only send to tokens that belong
+  // to this user (Firestore fcm_tokens/{uid}/tokens).
+  const firestore = admin.firestore();
+  const ownedSnap = await firestore
+    .collection("fcm_tokens").doc(uid)
+    .collection("tokens").where("valid", "==", true)
+    .get();
+
+  const ownedTokens = new Set(ownedSnap.docs.map((d) => d.data().token));
+  const filtered = tokens.filter((t) => ownedTokens.has(t));
+
+  if (filtered.length === 0) {
+    console.warn(`sendNotification: uid=${uid} has no owned tokens among ${tokens.length} submitted`);
+    return { success: true, invalidTokens: [] };
+  }
 
   const dataPayload = {};
   if (data) {
@@ -311,7 +340,7 @@ exports.sendNotification = onCall(async (request) => {
     }
   }
 
-  const messages = tokens.map((tk) => ({
+  const messages = filtered.map((tk) => ({
     token: tk,
     notification: { title, body },
     data: dataPayload,
@@ -336,7 +365,7 @@ exports.sendNotification = onCall(async (request) => {
       (r.error.code === "messaging/invalid-registration-token" ||
         r.error.code === "messaging/registration-token-not-registered")
     ) {
-      invalidTokens.push(tokens[i]);
+      invalidTokens.push(filtered[i]);
     }
   });
 
@@ -381,8 +410,8 @@ exports.sendNotificationFromESP32 = onRequest(
     const { title, body, data, userId, authKey } = req.body;
 
     // --- Layer 1: shared-secret check ---
-    const expectedKey = ESP_AUTH_KEY.value() || "geyserswitch-bloc-orange";
-    if (authKey !== expectedKey) {
+    const expectedKey = ESP_AUTH_KEY.value();
+    if (!expectedKey || authKey !== expectedKey) {
       console.warn("sendNotificationFromESP32: invalid authKey");
       return res.status(403).send("Forbidden");
     }

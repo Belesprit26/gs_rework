@@ -13,9 +13,10 @@ class TemperatureDisplay extends StatelessWidget {
     this.isLoading = false,
     this.size = 180,
     this.onTap,
+    this.onSensorOfflineTap,
   });
 
-  /// Current temperature value.
+  /// Current temperature value.  Negative means sensor offline.
   final double temperature;
 
   /// Unit label displayed below the reading.
@@ -30,19 +31,24 @@ class TemperatureDisplay extends StatelessWidget {
   /// Called when the user taps the display (e.g. to open settings).
   final VoidCallback? onTap;
 
+  /// Called when the user taps the "?" sensor-offline indicator.
+  final VoidCallback? onSensorOfflineTap;
+
+  bool get _isSensorOffline => temperature < 0;
+
   @override
   Widget build(BuildContext context) {
     final innerSize = size * 0.86;
     final theme = Theme.of(context);
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: _isSensorOffline ? onSensorOfflineTap : onTap,
       child: SizedBox(
         width: size,
         height: size,
         child: CustomPaint(
           painter: _RingPainter(
-            temperature: temperature,
+            temperature: _isSensorOffline ? 0 : temperature,
             ringWidth: 6,
           ),
           child: Center(
@@ -67,32 +73,71 @@ class TemperatureDisplay extends StatelessWidget {
                         height: size * 0.2,
                         child: const CircularProgressIndicator(strokeWidth: 2.5),
                       )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${temperature.round()}°',
-                            style: theme.textTheme.headlineLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: size * 0.22,
-                              height: 1,
-                            ),
+                    : _isSensorOffline
+                        ? _SensorOfflineContent(size: size, theme: theme)
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${temperature.round()}°',
+                                style: theme.textTheme.headlineLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: size * 0.22,
+                                  height: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                unit,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: Colors.grey,
+                                  fontSize: size * 0.09,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            unit,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey,
-                              fontSize: size * 0.09,
-                            ),
-                          ),
-                        ],
-                      ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SensorOfflineContent extends StatelessWidget {
+  const _SensorOfflineContent({required this.size, required this.theme});
+
+  final double size;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.help_outline_rounded,
+          size: size * 0.22,
+          color: Colors.orange.shade600,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Sensor offline',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: Colors.orange.shade700,
+            fontSize: size * 0.07,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          'Tap for info',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: Colors.grey,
+            fontSize: size * 0.06,
+          ),
+        ),
+      ],
     );
   }
 }

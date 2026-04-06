@@ -40,6 +40,7 @@
             "ar":    { ".validate": "newData.isBoolean()" },
             "tmask": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 31" },
             "tcust": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1439" },
+            "maxon": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1440" },
             "$other": { ".validate": false }
           }
         },
