@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
+import '../../core/debug/debug_log.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/geyser/repositories/geyser_control_repository.dart';
@@ -89,10 +88,8 @@ class TelemetryRecorder {
     _recordReading();
     _recordTimer = Timer.periodic(recordingInterval, (_) => _recordReading());
 
-    if (kDebugMode) {
-      debugPrint('[TelemetryRecorder] Started recording '
-          'every ${recordingInterval.inSeconds}s');
-    }
+    debugLog('TelemetryRecorder',
+        'Started recording every ${recordingInterval.inSeconds}s');
   }
 
   void _stopRecording() {
@@ -100,9 +97,7 @@ class TelemetryRecorder {
     _recordTimer = null;
     _isRecording = false;
 
-    if (kDebugMode) {
-      debugPrint('[TelemetryRecorder] Stopped recording');
-    }
+    debugLog('TelemetryRecorder', 'Stopped recording');
   }
 
   Future<void> _recordReading() async {
@@ -128,29 +123,22 @@ class TelemetryRecorder {
 
       await _telemetry.insert(record);
 
-      if (kDebugMode) {
-        debugPrint('[TelemetryRecorder] Recorded: '
-            '${snapshot.temperature}°C, '
-            'on=${snapshot.isOn}');
-      }
+      debugLog('TelemetryRecorder',
+          'Recorded: ${snapshot.temperature}°C, on=${snapshot.isOn}');
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TelemetryRecorder] Error recording: $e');
-      }
+      debugLog('TelemetryRecorder', 'Error recording: $e');
     }
   }
 
   Future<void> _pruneOldRecords() async {
     try {
       final pruned = await _telemetry.pruneOlderThan(retentionDays: retentionDays);
-      if (pruned > 0 && kDebugMode) {
-        debugPrint('[TelemetryRecorder] Pruned $pruned records '
-            'older than $retentionDays days');
+      if (pruned > 0) {
+        debugLog('TelemetryRecorder',
+            'Pruned $pruned records older than $retentionDays days');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TelemetryRecorder] Error pruning: $e');
-      }
+      debugLog('TelemetryRecorder', 'Error pruning: $e');
     }
   }
 }

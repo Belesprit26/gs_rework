@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../../../core/debug/debug_log.dart';
 import '../../../domain/notifications/entities/device_notification.dart';
 import '../../../domain/notifications/repositories/notification_repository.dart';
 import '../../../firebase_options.dart';
@@ -61,10 +61,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         source: NotificationSource.remote,
       ));
 
-      if (kDebugMode) {
-        debugPrint('[FCM-bg] Inserted remote notification: '
-            '${type.label} @ $temp°C');
-      }
+      debugLog('FCM-bg',
+          'Inserted remote notification: ${type.label} @ $temp°C');
     }
   } finally {
     await db.close();
@@ -137,9 +135,7 @@ class PushNotificationManager {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      if (kDebugMode) {
-        debugPrint('[FCM] Notification permission denied by user');
-      }
+      debugLog('FCM', 'Notification permission denied by user');
       return;
     }
 
@@ -168,9 +164,8 @@ class PushNotificationManager {
       _onNotificationTapped(initialMessage);
     }
 
-    if (kDebugMode) {
-      debugPrint('[FCM] Initialized — permission=${settings.authorizationStatus}');
-    }
+    debugLog('FCM',
+        'Initialized — permission=${settings.authorizationStatus}');
   }
 
   /// Cancel all stream subscriptions. Safe to call even if not initialized.
@@ -223,13 +218,9 @@ class PushNotificationManager {
         'token': token,
         'platform': Platform.isIOS ? 'ios' : 'android',
       });
-      if (kDebugMode) {
-        debugPrint('[FCM] Token registered with backend');
-      }
+      debugLog('FCM', 'Token registered with backend');
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FCM] Token registration failed: $e');
-      }
+      debugLog('FCM', 'Token registration failed: $e');
     }
   }
 
@@ -304,10 +295,8 @@ class PushNotificationManager {
       );
 
       if (exists) {
-        if (kDebugMode) {
-          debugPrint('[FCM] Duplicate event (BLE already delivered): '
-              '${type.label} @ $temp°C');
-        }
+        debugLog('FCM',
+            'Duplicate event (BLE already delivered): ${type.label} @ $temp°C');
         return;
       }
 
@@ -321,14 +310,10 @@ class PushNotificationManager {
 
       _notificationService.refreshUnreadCount();
 
-      if (kDebugMode) {
-        debugPrint('[FCM] Bridged remote notification: '
-            '${type.label} @ $temp°C');
-      }
+      debugLog('FCM',
+          'Bridged remote notification: ${type.label} @ $temp°C');
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FCM] Bridge to local DB failed: $e');
-      }
+      debugLog('FCM', 'Bridge to local DB failed: $e');
     }
   }
 }

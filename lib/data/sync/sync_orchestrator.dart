@@ -1,8 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
-
+import '../../core/debug/debug_log.dart';
 import '../../domain/telemetry/repositories/telemetry_sync_repository.dart';
 import '../local/prefs_manager.dart';
 
@@ -57,7 +56,7 @@ class SyncOrchestrator {
     try {
       final hasPending = await _sync.hasPendingRecords;
       if (!hasPending) {
-        if (kDebugMode) debugPrint('[SyncOrchestrator] No pending records');
+        debugLog('SyncOrchestrator', 'No pending records');
         return true;
       }
 
@@ -67,15 +66,11 @@ class SyncOrchestrator {
       await _prefs.setLastSyncTime(DateTime.now().toUtc());
       await _prefs.setPendingRetry(false);
 
-      if (kDebugMode) {
-        debugPrint('[SyncOrchestrator] Synced $count records');
-      }
+      debugLog('SyncOrchestrator', 'Synced $count records');
 
       return true;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[SyncOrchestrator] Sync failed: $e — will retry on WiFi');
-      }
+      debugLog('SyncOrchestrator', 'Sync failed: $e — will retry on WiFi');
 
       // Mark for WiFi retry.
       await _prefs.setPendingRetry(true);
@@ -104,9 +99,7 @@ class SyncOrchestrator {
 
       return true;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[SyncOrchestrator:bg] Sync failed: $e');
-      }
+      debugLog('SyncOrchestrator:bg', 'Sync failed: $e');
 
       await prefsManager.setPendingRetry(true);
 
@@ -122,9 +115,7 @@ class SyncOrchestrator {
 
     if (!_prefs.hasPendingRetry) return;
 
-    if (kDebugMode) {
-      debugPrint('[SyncOrchestrator] WiFi detected — retrying sync');
-    }
+    debugLog('SyncOrchestrator', 'WiFi detected — retrying sync');
 
     await attemptSync();
   }
@@ -139,9 +130,7 @@ class SyncOrchestrator {
     );
 
     if (hasConnection) {
-      if (kDebugMode) {
-        debugPrint('[SyncOrchestrator] Found pending retry — attempting now');
-      }
+      debugLog('SyncOrchestrator', 'Found pending retry — attempting now');
       await attemptSync();
     }
   }

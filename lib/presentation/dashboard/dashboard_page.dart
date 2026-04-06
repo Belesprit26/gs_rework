@@ -985,8 +985,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Tank size and element are per-device. '
-                    'Electricity rate and household size apply to your account.',
+                    'All settings are saved per-device so '
+                    'each geyser can have its own configuration.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.grey.shade600,
                     ),
@@ -1106,12 +1106,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                     config = config.copyWith(costPerKwh: parsed);
                   }
                   if (deviceId != null) {
-                    await configRepo.saveDeviceConfig(
-                      deviceId,
-                      config.deviceConfig,
-                    );
+                    await configRepo.saveConfig(deviceId, config);
                   }
-                  await configRepo.saveUserConfig(config.userConfig);
                   if (ctx.mounted) Navigator.pop(ctx);
                 },
                 child: const Text('Save'),

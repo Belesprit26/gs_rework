@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/debug/debug_log.dart';
 import '../../domain/notifications/entities/device_notification.dart';
 import '../../domain/notifications/repositories/notification_repository.dart';
 import '../../domain/telemetry/entities/telemetry_record.dart';
@@ -132,14 +133,11 @@ class CloudStorageSyncRepository implements TelemetrySyncRepository {
         }
         totalSynced += telemetryIds.length + notifIds.length;
 
-        if (kDebugMode) {
-          debugPrint('[Sync] Pushed ${telemetryIds.length} telemetry + '
-              '${notifIds.length} notifications for device $deviceId');
-        }
+        debugLog('Sync',
+            'Pushed ${telemetryIds.length} telemetry + '
+            '${notifIds.length} notifications for device $deviceId');
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[Sync] Failed for device $deviceId: $e');
-        }
+        debugLog('Sync', 'Failed for device $deviceId: $e');
         rethrow;
       }
     }

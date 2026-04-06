@@ -4,6 +4,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
+import '../../core/debug/debug_log.dart';
+
 import '../../firebase_options.dart';
 import '../local/app_database.dart';
 import '../local/drift_notification_repository.dart';
@@ -44,10 +46,9 @@ Future<void> initializeWorkmanager() async {
     backoffPolicyDelay: const Duration(minutes: 15),
   );
 
-  if (kDebugMode) {
-    debugPrint('[Workmanager] Registered daily sync task, '
-        'first run in ${_durationUntilMidnight().inMinutes} minutes');
-  }
+  debugLog('Workmanager',
+      'Registered daily sync task, '
+      'first run in ${_durationUntilMidnight().inMinutes} minutes');
 }
 
 /// Calculate delay until 23:55 local time (today or tomorrow).
@@ -103,16 +104,12 @@ void _callbackDispatcher() {
       // Close the database.
       await db.close();
 
-      if (kDebugMode) {
-        debugPrint('[Workmanager] Daily sync '
-            '${success ? 'succeeded' : 'needs retry'}');
-      }
+      debugLog('Workmanager',
+          'Daily sync ${success ? 'succeeded' : 'needs retry'}');
 
       return success;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[Workmanager] Task failed: $e');
-      }
+      debugLog('Workmanager', 'Task failed: $e');
       return false; // Workmanager will retry with backoff.
     }
   });

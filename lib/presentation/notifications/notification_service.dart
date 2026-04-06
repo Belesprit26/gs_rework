@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/ble/gatt_uuids.dart';
+import '../../core/debug/debug_log.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
@@ -136,9 +137,7 @@ class NotificationService {
       // 6. Prune old notifications (7-day retention).
       await _notifications.pruneOlderThan(retentionDays: 7);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[NotificationService] Buffer sync failed: $e');
-      }
+      debugLog('NotificationService', 'Buffer sync failed: $e');
     }
   }
 
@@ -177,15 +176,11 @@ class NotificationService {
 
       if (notifications.isNotEmpty) {
         await _notifications.insertBatch(notifications);
-        if (kDebugMode) {
-          debugPrint('[NotificationService] Synced '
-              '${notifications.length} buffered events');
-        }
+        debugLog('NotificationService',
+            'Synced ${notifications.length} buffered events');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[NotificationService] Event buffer read failed: $e');
-      }
+      debugLog('NotificationService', 'Event buffer read failed: $e');
     }
   }
 
@@ -228,15 +223,11 @@ class NotificationService {
 
       if (records.isNotEmpty) {
         await _telemetry.insertBatch(records);
-        if (kDebugMode) {
-          debugPrint('[NotificationService] Synced '
-              '${records.length} buffered telemetry entries');
-        }
+        debugLog('NotificationService',
+            'Synced ${records.length} buffered telemetry entries');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[NotificationService] Telemetry buffer read failed: $e');
-      }
+      debugLog('NotificationService', 'Telemetry buffer read failed: $e');
     }
   }
 
@@ -247,13 +238,9 @@ class NotificationService {
         GattUuids.bufferAck.str,
         Uint8List.fromList([0x01]),
       );
-      if (kDebugMode) {
-        debugPrint('[NotificationService] Buffer acknowledge sent');
-      }
+      debugLog('NotificationService', 'Buffer acknowledge sent');
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[NotificationService] Buffer ack failed: $e');
-      }
+      debugLog('NotificationService', 'Buffer ack failed: $e');
     }
   }
 
@@ -288,10 +275,8 @@ class NotificationService {
             }
           }
 
-          if (kDebugMode) {
-            debugPrint('[NotificationService] Real-time event: '
-                '${type.label} @ $temp°C');
-          }
+          debugLog('NotificationService',
+              'Real-time event: ${type.label} @ $temp°C');
         });
       },
     );
