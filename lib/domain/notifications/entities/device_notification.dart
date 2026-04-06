@@ -110,7 +110,7 @@ class DeviceNotification extends Equatable {
       case NotificationType.sensorRecover:
         return 'Temperature sensor is back online ($temperature°C)';
       case NotificationType.maxOnTimeout:
-        return 'Geyser turned off — exceeded max continuous run time';
+        return 'Geyser turned off — sensor offline, max run time exceeded';
       case NotificationType.unknown:
         return 'Unknown event at $temperature°C';
     }

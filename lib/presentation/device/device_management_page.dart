@@ -358,12 +358,23 @@ class _MaxOnTimerSection extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       current == 0
-                          ? 'No limit — the geyser will stay on until '
-                              'manually turned off or the thermostat trips.'
-                          : 'The geyser will automatically turn off after '
-                              '$label of continuous heating as a safety net.',
+                          ? 'No limit — if the temperature sensor is '
+                              'offline, the relay could stay on indefinitely.'
+                          : 'If the temperature sensor goes offline, '
+                              'the relay will automatically turn off after '
+                              '$label of continuous heating.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'When the sensor is working, the thermostat '
+                      'handles this automatically — this timer only '
+                      'activates as a safety net when the sensor is '
+                      'not detected.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade500,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -385,9 +396,10 @@ class _MaxOnTimerSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Recommended: 4 hours. This protects against '
-                      'a stuck relay or forgotten manual override. '
-                      'Your geyser\'s built-in thermostat is unaffected.',
+                      'Recommended: 4 hours. Protects against a '
+                      'sensor cable disconnect while the geyser is '
+                      'heating. Your geyser\'s built-in thermostat '
+                      'is unaffected.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade500,
                         fontStyle: FontStyle.italic,

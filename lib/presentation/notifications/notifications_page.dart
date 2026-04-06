@@ -162,6 +162,12 @@ class _NotificationTile extends StatelessWidget {
         return Colors.green;
       case NotificationType.minTempAlert:
         return Colors.orange;
+      case NotificationType.sensorFail:
+        return Colors.orange;
+      case NotificationType.sensorRecover:
+        return Colors.teal;
+      case NotificationType.maxOnTimeout:
+        return Colors.deepOrange;
       case NotificationType.unknown:
         return Colors.grey;
     }
@@ -175,6 +181,12 @@ class _NotificationTile extends StatelessWidget {
         return Icons.local_fire_department;
       case NotificationType.minTempAlert:
         return Icons.warning_amber_rounded;
+      case NotificationType.sensorFail:
+        return Icons.sensors_off;
+      case NotificationType.sensorRecover:
+        return Icons.sensors;
+      case NotificationType.maxOnTimeout:
+        return Icons.timer_off_outlined;
       case NotificationType.unknown:
         return Icons.help_outline;
     }

@@ -127,7 +127,7 @@ const EVENT_LABELS = {
   },
   6: {
     title: "Max-on safety off",
-    body: () => "Geyser turned off — exceeded max continuous run time",
+    body: () => "Geyser turned off — sensor offline, max run time exceeded",
   },
 };
 
