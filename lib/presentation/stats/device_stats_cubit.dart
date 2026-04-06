@@ -48,10 +48,7 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
   }
 
   Future<void> _activate() async {
-    _configSub = _config.watchConfig().listen((config) {
-      if (isClosed) return;
-      emit(state.copyWith(config: config));
-    });
+    _startConfigStream();
 
     try {
       final boot = await _rtdb.getLastBoot(_deviceId);
@@ -60,6 +57,14 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
     } catch (_) {}
 
     _startStatsStream();
+  }
+
+  void _startConfigStream() {
+    _configSub?.cancel();
+    _configSub = _config.watchConfig(_deviceId).listen((config) {
+      if (isClosed) return;
+      emit(state.copyWith(config: config));
+    });
   }
 
   void _startStatsStream() {
@@ -80,6 +85,8 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
     if (isClosed) return;
     _deviceId = deviceId;
     emit(state.copyWith(stats: const DailyStats(), lastBoot: null));
+
+    _startConfigStream();
     _startStatsStream();
 
     try {

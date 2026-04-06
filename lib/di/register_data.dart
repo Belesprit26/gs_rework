@@ -108,6 +108,7 @@ Future<void> registerData(GetIt getIt) async {
       telemetryRepository: getIt<TelemetryRepository>(),
       geyserControlRepository: getIt<GeyserControlRepository>(),
       bleRepository: getIt<BleRepository>(),
+      prefsManager: getIt<PrefsManager>(),
     ),
   );
 

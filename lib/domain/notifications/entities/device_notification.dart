@@ -62,7 +62,7 @@ class DeviceNotification extends Equatable {
   /// Auto-increment primary key (null for new records).
   final int? id;
 
-  /// BLE device ID this event came from.
+  /// Canonical RTDB device ID (8-char hex) this event came from.
   final String deviceId;
 
   /// The type of event.

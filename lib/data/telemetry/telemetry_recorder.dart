@@ -7,6 +7,7 @@ import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/geyser/repositories/geyser_control_repository.dart';
 import '../../domain/telemetry/entities/telemetry_record.dart';
 import '../../domain/telemetry/repositories/telemetry_repository.dart';
+import '../local/prefs_manager.dart';
 
 /// Background service that records telemetry to local storage.
 ///
@@ -25,15 +26,18 @@ class TelemetryRecorder {
     required TelemetryRepository telemetryRepository,
     required GeyserControlRepository geyserControlRepository,
     required BleRepository bleRepository,
+    required PrefsManager prefsManager,
     this.recordingInterval = const Duration(seconds: 60),
     this.retentionDays = 7,
   })  : _telemetry = telemetryRepository,
         _geyser = geyserControlRepository,
-        _ble = bleRepository;
+        _ble = bleRepository,
+        _prefs = prefsManager;
 
   final TelemetryRepository _telemetry;
   final GeyserControlRepository _geyser;
   final BleRepository _ble;
+  final PrefsManager _prefs;
 
   /// How often to record a telemetry entry.
   final Duration recordingInterval;
@@ -103,7 +107,9 @@ class TelemetryRecorder {
 
   Future<void> _recordReading() async {
     try {
-      final deviceId = _ble.connectedDeviceId;
+      final bleMac = _ble.connectedDeviceId;
+      if (bleMac == null) return;
+      final deviceId = _prefs.getRtdbDeviceId(bleMac);
       if (deviceId == null) return;
 
       // Use the cached snapshot — no BLE reads.  The notification

@@ -59,6 +59,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   crypto: ^3.0.6
   smooth_page_indicator: ^1.2.0+1
+  rxdart: ^0.28.0
 
 dev_dependencies:
   flutter_test:

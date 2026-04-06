@@ -25,6 +25,10 @@ import '../../domain/telemetry/repositories/telemetry_repository.dart';
 /// - Whether a notification appears in the list view
 /// - Whether it counts toward the unread badge
 /// - The notification is always stored and synced regardless.
+///
+/// All records use the canonical RTDB device ID (8-char hex), not the
+/// raw BLE identifier, so BLE-delivered and FCM-delivered events share
+/// the same key space and deduplication works correctly.
 class NotificationService {
   NotificationService({
     required BleRepository bleRepository,
@@ -45,6 +49,14 @@ class NotificationService {
   StreamSubscription<Uint8List>? _eventSub;
 
   final _unreadCountController = StreamController<int>.broadcast();
+
+  /// Resolve the currently connected BLE identifier to its canonical
+  /// RTDB device ID.  Returns null if unmapped or disconnected.
+  String? get _rtdbDeviceId {
+    final bleMac = _ble.connectedDeviceId;
+    if (bleMac == null) return null;
+    return _prefs.getRtdbDeviceId(bleMac);
+  }
 
   /// Stream of unread notification count (for badge UI).
   Stream<int> get unreadCount => _unreadCountController.stream;
@@ -78,7 +90,7 @@ class NotificationService {
 
   /// Refresh the unread count (call after dismissing or changing prefs).
   Future<void> refreshUnreadCount() async {
-    final deviceId = _ble.connectedDeviceId;
+    final deviceId = _rtdbDeviceId;
     if (deviceId == null) return;
 
     final count = await _notifications.countUndismissed(
@@ -138,7 +150,7 @@ class NotificationService {
       );
       if (bytes.isEmpty) return;
 
-      final deviceId = _ble.connectedDeviceId;
+      final deviceId = _rtdbDeviceId;
       if (deviceId == null) return;
 
       final notifications = <DeviceNotification>[];
@@ -185,7 +197,7 @@ class NotificationService {
       );
       if (bytes.isEmpty) return;
 
-      final deviceId = _ble.connectedDeviceId;
+      final deviceId = _rtdbDeviceId;
       if (deviceId == null) return;
 
       final records = <TelemetryRecord>[];
@@ -252,7 +264,7 @@ class NotificationService {
       (bytes) {
         if (bytes.length < 2) return;
 
-        final deviceId = _ble.connectedDeviceId;
+        final deviceId = _rtdbDeviceId;
         if (deviceId == null) return;
 
         final type = NotificationType.fromCode(bytes[0]);

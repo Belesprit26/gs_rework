@@ -21,7 +21,7 @@ abstract final class GattUuids {
   /// Properties: Read, Write, Notify.
   static final geyserState = Guid('47530003-7652-4543-b201-c4b801a6c700');
 
-  /// Temperature limits: [minTemp, maxTemp] as two uint8 bytes.
+  /// Temperature limits: [minTemp, maxTemp, autoReheat] as 3 uint8 bytes.
   /// Properties: Read, Write.
   static final tempLimits = Guid('47530004-7652-4543-b201-c4b801a6c700');
 
@@ -84,4 +84,11 @@ abstract final class GattUuids {
   /// Buffer acknowledge — Write.
   /// Write any byte to clear both event and telemetry buffers on the ESP.
   static final bufferAck = Guid('4753000b-7652-4543-b201-c4b801a6c700');
+
+  /// Stored device ID — Read only, unencrypted.
+  /// Returns the RTDB device ID (e.g. "a3f9b21c") from the ESP's NVS.
+  /// Used for iOS re-pairing: when the Core Bluetooth UUID changes, the
+  /// app reads this to recover the existing RTDB mapping instead of
+  /// creating a new device ID.
+  static final storedDeviceId = Guid('4753000c-7652-4543-b201-c4b801a6c700');
 }

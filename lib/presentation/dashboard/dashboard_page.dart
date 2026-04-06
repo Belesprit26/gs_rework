@@ -89,7 +89,7 @@ class _DashboardPageState extends State<DashboardPage> {
         index: _currentTab,
         children: const [
           _HomeTab(),
-          Center(child: Text('Devices – coming soon')),
+          _UsageTab(),
           _SettingsTab(),
         ],
       ),
@@ -103,9 +103,9 @@ class _DashboardPageState extends State<DashboardPage> {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.devices_other_outlined),
-            selectedIcon: Icon(Icons.devices_other_rounded),
-            label: 'Devices',
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart_rounded),
+            label: 'Usage',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
@@ -784,6 +784,48 @@ class _NotificationBellState extends State<_NotificationBell> {
   }
 }
 
+// ── Usage tab ────────────────────────────────────────────────────────
+
+class _UsageTab extends StatelessWidget {
+  const _UsageTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.bar_chart_rounded,
+              size: 64,
+              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Usage History',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Daily and weekly energy charts coming soon.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Settings tab ─────────────────────────────────────────────────────
 
 class _SettingsTab extends StatefulWidget {
@@ -851,6 +893,29 @@ class _SettingsTabState extends State<_SettingsTab> {
           trailing: const Icon(Icons.chevron_right),
           onTap: () => _showGeyserSetupDialog(context),
         ),
+        const SizedBox(height: 20),
+        BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
+          builder: (context, regState) {
+            final count = regState.devices.length;
+            return ListTile(
+              leading: const Icon(Icons.devices_other_outlined),
+              title: const Text('Manage Devices'),
+              subtitle: Text(
+                count <= 1
+                    ? '1 device registered'
+                    : '$count devices registered',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                // TODO: Navigate to device management page
+              },
+            );
+          },
+        ),
       ],
     );
   }
@@ -858,7 +923,9 @@ class _SettingsTabState extends State<_SettingsTab> {
   Future<void> _showGeyserSetupDialog(BuildContext context) async {
     final configRepo = getIt<GeyserConfigRepository>();
     final statsCubit = context.read<DeviceStatsCubit>();
+    final registry = context.read<DeviceRegistryCubit>();
     var config = statsCubit.state.config;
+    final deviceId = registry.state.selectedRtdbId;
 
     final rateController = TextEditingController(
       text: config.costPerKwh.toStringAsFixed(2),
@@ -877,8 +944,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'These settings are used to calculate your energy '
-                    'usage and savings. They sync across all your devices.',
+                    'Tank size and element are per-device. '
+                    'Electricity rate and household size apply to your account.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.grey.shade600,
                     ),
@@ -997,7 +1064,13 @@ class _SettingsTabState extends State<_SettingsTab> {
                   if (parsed != null && parsed > 0) {
                     config = config.copyWith(costPerKwh: parsed);
                   }
-                  await configRepo.saveConfig(config);
+                  if (deviceId != null) {
+                    await configRepo.saveDeviceConfig(
+                      deviceId,
+                      config.deviceConfig,
+                    );
+                  }
+                  await configRepo.saveUserConfig(config.userConfig);
                   if (ctx.mounted) Navigator.pop(ctx);
                 },
                 child: const Text('Save'),

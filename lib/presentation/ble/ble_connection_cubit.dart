@@ -270,12 +270,32 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
       ));
 
       // Ensure we have an RTDB device ID mapping for this device.
-      // Pre-existing units (provisioned before multi-device) won't have
-      // a mapping yet — auto-assign 'g1' so they continue working.
       final bleMac = state.pairedDeviceId;
       if (bleMac != null && _prefs.getRtdbDeviceId(bleMac) == null) {
-        await _prefs.setRtdbDeviceId(bleMac, 'g1');
-        debugPrint('[BLE] Legacy device — mapped $bleMac → "g1"');
+        // Try reading the stored device ID from the ESP (0x0C).
+        // This handles iOS re-pairing where the Core Bluetooth UUID
+        // changes but the firmware still knows its RTDB identity.
+        String? storedId;
+        try {
+          final idBytes = await _ble.readCharacteristic(
+            GattUuids.storedDeviceId.str,
+          );
+          if (idBytes.isNotEmpty) {
+            storedId = utf8.decode(idBytes);
+          }
+        } catch (_) {
+          // Older firmware without 0x0C — fall through to legacy.
+        }
+
+        if (storedId != null && storedId.isNotEmpty) {
+          await _prefs.setRtdbDeviceId(bleMac, storedId);
+          debugPrint('[BLE] Recovered device ID from ESP: $bleMac → "$storedId"');
+        } else {
+          // Pre-existing units (provisioned before multi-device) won't
+          // have a mapping yet — auto-assign 'g1' so they continue working.
+          await _prefs.setRtdbDeviceId(bleMac, 'g1');
+          debugPrint('[BLE] Legacy device — mapped $bleMac → "g1"');
+        }
       }
 
       // Persist the nickname and update the live device registry so

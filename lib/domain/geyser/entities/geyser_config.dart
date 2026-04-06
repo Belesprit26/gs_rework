@@ -1,9 +1,12 @@
 import 'package:equatable/equatable.dart';
 
-/// User-level geyser configuration stored in Firestore `users/{uid}`.
+import 'device_config.dart';
+import 'user_config.dart';
+
+/// Combined geyser configuration used by stats calculations and UI.
 ///
-/// Controls how energy usage and savings are calculated.
-/// Syncs across all devices logged into the same account.
+/// Composed from [DeviceConfig] (per-device, Firestore subcollection)
+/// and [UserConfig] (user-scoped, Firestore user doc).
 class GeyserConfig extends Equatable {
   const GeyserConfig({
     this.tankSize = 150,
@@ -21,10 +24,23 @@ class GeyserConfig extends Equatable {
   /// Electricity cost in Rands per kWh.
   final double costPerKwh;
 
-  /// Number of people in the household (1–8). Reserved for future
-  /// baseline refinement (Approach B: standing loss + per-person draw).
+  /// Number of people in the household (1–8).
   final int householdSize;
 
+  /// Construct from split config sources.
+  factory GeyserConfig.fromParts({
+    required DeviceConfig device,
+    required UserConfig user,
+  }) {
+    return GeyserConfig(
+      tankSize: device.tankSize,
+      elementKw: device.elementKw,
+      costPerKwh: user.costPerKwh,
+      householdSize: user.householdSize,
+    );
+  }
+
+  /// Legacy: parse from a single Firestore document (migration path).
   factory GeyserConfig.fromMap(Map<String, dynamic>? map) {
     if (map == null) return const GeyserConfig();
     return GeyserConfig(
@@ -41,6 +57,16 @@ class GeyserConfig extends Equatable {
         'costPerKwh': costPerKwh,
         'householdSize': householdSize,
       };
+
+  DeviceConfig get deviceConfig => DeviceConfig(
+        tankSize: tankSize,
+        elementKw: elementKw,
+      );
+
+  UserConfig get userConfig => UserConfig(
+        costPerKwh: costPerKwh,
+        householdSize: householdSize,
+      );
 
   GeyserConfig copyWith({
     int? tankSize,

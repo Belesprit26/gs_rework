@@ -37,7 +37,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _load() async {
     final bleState = context.read<BleConnectionCubit>().state;
-    final deviceId = bleState.pairedDeviceId;
+    final bleMac = bleState.pairedDeviceId;
+    final deviceId = bleMac != null ? _prefs.getRtdbDeviceId(bleMac) : null;
     if (deviceId == null) {
       setState(() => _loading = false);
       return;
