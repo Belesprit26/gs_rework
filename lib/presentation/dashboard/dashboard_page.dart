@@ -14,6 +14,7 @@ import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/notifications/entities/device_notification.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
+import '../device/device_management_page.dart';
 import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../notifications/notification_service.dart';
@@ -910,9 +911,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                // TODO: Navigate to device management page
-              },
+              onTap: () => Navigator.of(context)
+                  .push(DeviceManagementPage.route()),
             );
           },
         ),

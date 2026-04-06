@@ -82,6 +82,26 @@ class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
     emit(state.copyWith(devices: updated));
   }
 
+  /// Remove a device from the registry and clean up its prefs data.
+  Future<void> removeDevice(String rtdbDeviceId) async {
+    if (isClosed) return;
+    final idx = state.devices.indexWhere(
+      (d) => d.rtdbDeviceId == rtdbDeviceId,
+    );
+    if (idx < 0) return;
+
+    final device = state.devices[idx];
+    await _prefs.removeDevice(device.bleMac, device.rtdbDeviceId);
+
+    final updated = List<DeviceInfo>.of(state.devices)..removeAt(idx);
+    final newIndex = updated.isEmpty
+        ? 0
+        : state.selectedIndex >= updated.length
+            ? updated.length - 1
+            : state.selectedIndex;
+    emit(state.copyWith(devices: updated, selectedIndex: newIndex));
+  }
+
   /// Reset the registry on sign-out.
   void clear() {
     if (isClosed) return;

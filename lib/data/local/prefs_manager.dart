@@ -142,6 +142,13 @@ class PrefsManager {
     await _prefs.setString('$_kDeviceNickPrefix$rtdbDeviceId', nickname);
   }
 
+  /// Remove a device mapping and its nickname.
+  Future<void> removeDevice(String bleMac, String rtdbDeviceId) async {
+    final key = '$_kRtdbDidPrefix${_sanitiseMac(bleMac)}';
+    await _prefs.remove(key);
+    await _prefs.remove('$_kDeviceNickPrefix$rtdbDeviceId');
+  }
+
   // ── Sign-out cleanup ──────────────────────────────────────────────
 
   /// Remove all device mappings, nicknames, and pairing data.
