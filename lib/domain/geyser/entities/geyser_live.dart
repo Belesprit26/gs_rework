@@ -20,7 +20,7 @@ class GeyserLive extends Equatable {
       temperature: (map['t'] as num?)?.toDouble() ?? 0,
       isOn: map['on'] as bool? ?? false,
       lastSeen: map['at'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['at'] as int)
+          ? DateTime.fromMillisecondsSinceEpoch((map['at'] as num).toInt())
           : null,
     );
   }

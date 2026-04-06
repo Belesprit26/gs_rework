@@ -69,7 +69,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
     final savedId = _prefs.pairedDeviceId;
     final savedName = _prefs.pairedDeviceName;
 
-    if (savedId == null) return;
+    if (savedId == null || isClosed) return;
 
     emit(state.copyWith(
       pairedDeviceId: savedId,
@@ -87,9 +87,8 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   /// If BT is off, sets a pending flag so we auto-start when it turns on.
   /// If already connected, this is a no-op.
   void startScan() {
-    if (state.isConnected) return;
+    if (isClosed || state.isConnected) return;
 
-    // If BT is off, remember that the user wants to scan.
     if (!state.isBluetoothOn) {
       _pendingScan = true;
       emit(state.copyWith(
@@ -104,14 +103,15 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
 
     _scanSub = _ble.startScan().listen(
       (devices) {
+        if (isClosed) return;
         emit(state.copyWith(scannedDevices: devices));
       },
       onError: (Object e) {
+        if (isClosed) return;
         emit(state.copyWith(scanError: e.toString()));
       },
       onDone: () {
-        // Scan finished (timeout reached).  Restore the real status
-        // rather than blindly going to 'disconnected'.
+        if (isClosed) return;
         if (state.connectionStatus == BleConnectionStatus.scanning) {
           final realStatus = _ble.currentStatus;
           emit(state.copyWith(connectionStatus: realStatus));
@@ -127,8 +127,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
     _scanSub = null;
     await _ble.stopScan();
 
-    // After stopping a scan, restore the true connection status from
-    // the BLE repository instead of assuming 'disconnected'.
+    if (isClosed) return;
     final realStatus = _ble.currentStatus;
     if (state.connectionStatus == BleConnectionStatus.scanning) {
       emit(state.copyWith(connectionStatus: realStatus));
@@ -138,6 +137,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   /// Connect to a scanned device and persist as paired.
   Future<void> connectToDevice(ScannedDevice device) async {
     await stopScan();
+    if (isClosed) return;
 
     await _prefs.setPairedDevice(device.id, device.name);
 
@@ -153,6 +153,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   Future<void> unpair() async {
     await _ble.disconnect();
     await _prefs.clearPairedDevice();
+    if (isClosed) return;
     emit(BleConnectionState(isBluetoothOn: _ble.isAdapterOn));
   }
 
@@ -205,6 +206,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   // ── Private ───────────────────────────────────────────────────────
 
   void _onAdapterStateChanged(bool isOn) {
+    if (isClosed) return;
     emit(state.copyWith(isBluetoothOn: isOn));
 
     if (isOn) {
@@ -220,6 +222,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   }
 
   void _onStatusChanged(BleConnectionStatus status) {
+    if (isClosed) return;
     emit(state.copyWith(connectionStatus: status));
 
     // When connection is ready, read provisioning info from the device.
@@ -231,20 +234,19 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   /// Read provisioning state, nickname, and SSID from the device.
   Future<void> _readDeviceInfo() async {
     try {
-      // Read provisioning status.
       final statusBytes =
           await _ble.readCharacteristic(GattUuids.provStatus.str);
+      if (isClosed) return;
       final provStatus = statusBytes.isNotEmpty
           ? ProvisioningStatus.fromByte(statusBytes[0])
           : ProvisioningStatus.idle;
 
-      // Read device nickname.
       final nickBytes =
           await _ble.readCharacteristic(GattUuids.provDeviceName.str);
+      if (isClosed) return;
       final nickname =
           nickBytes.isNotEmpty ? utf8.decode(nickBytes) : null;
 
-      // Read stored SSID if WiFi is provisioned.
       String? ssid;
       final isWifi = provStatus == ProvisioningStatus.complete ||
           provStatus == ProvisioningStatus.wifiOk;
@@ -252,12 +254,12 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
         try {
           final ssidBytes =
               await _ble.readCharacteristic(GattUuids.provWifiCreds.str);
+          if (isClosed) return;
           ssid = ssidBytes.isNotEmpty ? utf8.decode(ssidBytes) : null;
-        } catch (_) {
-          // Non-fatal — SSID read failed.
-        }
+        } catch (_) {}
       }
 
+      if (isClosed) return;
       emit(state.copyWith(
         deviceNickname: nickname,
         isWifiProvisioned: isWifi,

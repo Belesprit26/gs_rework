@@ -6,6 +6,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 import '../../data/firebase/config/geyser_config_repository.dart';
 import '../../data/local/prefs_manager.dart';
+import '../../data/telemetry/telemetry_recorder.dart';
 import '../../di/locator.dart';
 import '../../domain/auth/usecases/sign_out.dart';
 import '../../domain/ble/ble_connection_status.dart';
@@ -136,6 +137,17 @@ class _DashboardPageState extends State<DashboardPage> {
     );
 
     if (confirmed != true || !context.mounted) return;
+
+    // Tear down singletons that hold streams/subscriptions before
+    // Firebase Auth signs out.  This prevents them from operating
+    // on a signed-out auth context.
+    await getIt<TelemetryRecorder>().stop();
+    await getIt<NotificationService>().stop();
+    await getIt<GeyserControlCubit>().resetForSignOut();
+    context.read<BleConnectionCubit>().unpair();
+    context.read<DeviceRegistryCubit>().clear();
+    await getIt<PrefsManager>().clearDeviceData();
+
     await getIt<SignOut>().call();
   }
 }

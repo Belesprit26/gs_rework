@@ -6,7 +6,6 @@ class LocalUserModel extends LocalUser {
     required super.uid,
     required super.email,
     required super.fullName,
-    required super.temperature,
     super.profilePic,
     super.bio,
   });
@@ -16,17 +15,15 @@ class LocalUserModel extends LocalUser {
           uid: '',
           email: '',
           fullName: '',
-          temperature: 0.0,
         );
 
   LocalUserModel.fromMap(DataMap map)
       : super(
-          uid: map['uid'] as String,
-          email: map['email'] as String,
-          fullName: map['fullName'] as String,
+          uid: map['uid'] as String? ?? '',
+          email: map['email'] as String? ?? '',
+          fullName: map['fullName'] as String? ?? '',
           profilePic: map['profilePic'] as String?,
           bio: map['bio'] as String?,
-          temperature: (map['temperature'] as num).toDouble(),
         );
 
   DataMap toMap() {
@@ -36,7 +33,6 @@ class LocalUserModel extends LocalUser {
       'profilePic': profilePic,
       'bio': bio,
       'fullName': fullName,
-      'temperature': temperature,
     };
   }
 }

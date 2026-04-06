@@ -141,4 +141,18 @@ class PrefsManager {
   Future<void> setDeviceNickname(String rtdbDeviceId, String nickname) async {
     await _prefs.setString('$_kDeviceNickPrefix$rtdbDeviceId', nickname);
   }
+
+  // ── Sign-out cleanup ──────────────────────────────────────────────
+
+  /// Remove all device mappings, nicknames, and pairing data.
+  /// Called on sign-out so the next user starts fresh.
+  Future<void> clearDeviceData() async {
+    final keysToRemove = _prefs.getKeys().where((k) =>
+        k.startsWith(_kRtdbDidPrefix) ||
+        k.startsWith(_kDeviceNickPrefix));
+    for (final key in keysToRemove.toList()) {
+      await _prefs.remove(key);
+    }
+    await clearPairedDevice();
+  }
 }

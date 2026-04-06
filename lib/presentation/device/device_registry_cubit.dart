@@ -21,6 +21,7 @@ class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
 
   /// Load all known devices from SharedPreferences.
   void load() {
+    if (isClosed) return;
     final mappings = _prefs.getAllDeviceMappings();
     if (mappings.isEmpty) return;
 
@@ -38,12 +39,12 @@ class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
 
   /// Add a newly provisioned device to the registry.
   void addDevice(DeviceInfo device) {
+    if (isClosed) return;
     final existing = state.devices.indexWhere(
       (d) => d.rtdbDeviceId == device.rtdbDeviceId,
     );
 
     if (existing >= 0) {
-      // Re-provisioned same device — update nickname.
       final updated = List<DeviceInfo>.of(state.devices);
       updated[existing] = device;
       emit(state.copyWith(devices: updated, selectedIndex: existing));
@@ -58,6 +59,7 @@ class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
 
   /// Change the selected device (e.g. from PageView swipe).
   void selectDevice(int index) {
+    if (isClosed) return;
     if (index < 0 || index >= state.devices.length) return;
     if (index == state.selectedIndex) return;
     emit(state.copyWith(selectedIndex: index));
@@ -65,6 +67,7 @@ class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
 
   /// Update the nickname for a device (e.g. after BLE read or rename).
   void updateNickname(String rtdbDeviceId, String nickname) {
+    if (isClosed) return;
     final idx = state.devices.indexWhere(
       (d) => d.rtdbDeviceId == rtdbDeviceId,
     );
@@ -77,5 +80,11 @@ class DeviceRegistryCubit extends Cubit<DeviceRegistryState> {
       nickname: nickname,
     );
     emit(state.copyWith(devices: updated));
+  }
+
+  /// Reset the registry on sign-out.
+  void clear() {
+    if (isClosed) return;
+    emit(const DeviceRegistryState());
   }
 }

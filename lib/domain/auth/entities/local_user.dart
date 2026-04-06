@@ -5,7 +5,6 @@ class LocalUser extends Equatable {
     required this.uid,
     required this.email,
     required this.fullName,
-    required this.temperature,
     this.profilePic,
     this.bio,
   });
@@ -17,7 +16,6 @@ class LocalUser extends Equatable {
           fullName: '',
           profilePic: '',
           bio: '',
-          temperature: 0.0,
         );
 
   final String uid;
@@ -25,7 +23,6 @@ class LocalUser extends Equatable {
   final String? profilePic;
   final String? bio;
   final String fullName;
-  final double temperature;
 
   @override
   List<Object?> get props => [
@@ -34,6 +31,5 @@ class LocalUser extends Equatable {
         profilePic,
         bio,
         fullName,
-        temperature,
       ];
 }

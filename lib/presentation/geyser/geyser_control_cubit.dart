@@ -415,6 +415,18 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     await _geyser.stopListening();
   }
 
+  /// Cancel all subscriptions and reset state for sign-out.
+  ///
+  /// Unlike [close], this keeps the cubit alive so it can be
+  /// re-activated when the next user signs in.
+  Future<void> resetForSignOut() async {
+    await _stopStreams();
+    await _stopRemoteSync();
+    _bleReady = false;
+    if (isClosed) return;
+    emit(const GeyserControlState());
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   @override

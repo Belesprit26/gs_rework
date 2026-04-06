@@ -186,7 +186,6 @@ class FirebaseAuthRepository implements AuthRepository {
       email: user.email ?? fallbackEmail,
       fullName: fullName,
       profilePic: profilePic,
-      temperature: 0.0,
     );
 
     await _firestore.collection('users').doc(user.uid).set(
