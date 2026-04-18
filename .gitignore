@@ -46,6 +46,7 @@ app.*.map.json
 
 # Cloud Functions
 functions/node_modules/
+functions/.env
 
 # Cursor
 .cursor/

@@ -6,7 +6,7 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-const FIREBASE_API_KEY = "AIzaSyD2m4T7ylElcXPbPS9YupoRFX2ebfjB7bI";
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 
 const ESP_AUTH_KEY = defineSecret("ESP_AUTH_KEY");
 

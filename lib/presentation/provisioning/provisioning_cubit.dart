@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
@@ -254,6 +255,20 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
           bleMac: bleMac,
           nickname: nick,
         ));
+
+        final uid = state.firebaseUid;
+        if (uid != null) {
+          FirebaseFirestore.instance.doc('users/$uid').set({
+            'devices': {
+              deviceId: {
+                'pairedAt': FieldValue.serverTimestamp(),
+                'nickname': nick,
+                'bleMac': bleMac,
+              }
+            },
+            'hasDevice': true,
+          }, SetOptions(merge: true));
+        }
       }
     } catch (e) {
       emit(state.copyWith(
