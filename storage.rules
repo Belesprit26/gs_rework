@@ -4,10 +4,16 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     // ── Firmware binaries (legacy GeyserSwitch_Orange OTA) ──────────
-    // Public read so ESP32 can download updates without auth.
+    // Public read so an unauthenticated ESP32 can download updates.
+    // Writes are DENIED to all clients: firmware is published only via
+    // privileged tooling (Admin SDK / `firebase deploy` / CI), which
+    // bypasses these rules. This closes the supply-chain hole where any
+    // signed-in user could overwrite the binary that devices download.
+    // (When gs_rework gains OTA, prefer authenticated read + signed
+    // images over public read.)
     match /firmware/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if false;
     }
 
     // ── Telemetry data (gs_rework) ──────────────────────────────────
