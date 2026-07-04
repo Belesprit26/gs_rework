@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../../core/debug/debug_log.dart';
@@ -24,10 +23,7 @@ const String kDailySyncTaskId = 'com.geyserswitch.dailySync';
 ///
 /// Call once from main.dart.
 Future<void> initializeWorkmanager() async {
-  await Workmanager().initialize(
-    _callbackDispatcher,
-    isInDebugMode: kDebugMode,
-  );
+  await Workmanager().initialize(_callbackDispatcher);
 
   // Register a daily periodic task.
   // On Android this uses WorkManager's PeriodicWorkRequest.

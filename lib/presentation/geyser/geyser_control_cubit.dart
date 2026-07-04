@@ -10,6 +10,7 @@ import '../../domain/geyser/entities/geyser_settings.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/geyser/repositories/geyser_control_repository.dart';
 import '../../domain/geyser/repositories/rtdb_repository.dart';
+import '../../domain/geyser/temp_limits.dart';
 import '../../domain/geyser/timer_presets.dart';
 
 part 'geyser_control_state.dart';
@@ -120,6 +121,10 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   }
 
   /// Set temperature limits and auto-reheat flag.
+  ///
+  /// Values are clamped with the same rules the firmware applies
+  /// (range + 5°C deadband), so the UI never shows a value the
+  /// device is about to override.
   Future<void> setTempLimits({
     required int min,
     required int max,
@@ -127,22 +132,23 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   }) async {
     if (isClosed) return;
     emit(state.copyWith(error: null));
+    final (min: mn, max: mx) = clampTempLimits(min: min, max: max);
     try {
       if (_useRemote) {
         await _rtdb!.writeSettings(_deviceId, {
-          'min': min,
-          'max': max,
+          'min': mn,
+          'max': mx,
           'ar': autoReheat,
         });
       } else {
         await _geyser.setTempLimits(
-            min: min, max: max, autoReheat: autoReheat);
+            min: mn, max: mx, autoReheat: autoReheat);
       }
       if (isClosed) return;
       emit(state.copyWith(
         snapshot: state.snapshot.copyWith(
-          minTemp: min,
-          maxTemp: max,
+          minTemp: mn,
+          maxTemp: mx,
           autoReheat: autoReheat,
         ),
       ));

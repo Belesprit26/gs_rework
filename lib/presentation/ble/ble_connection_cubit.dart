@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/ble/gatt_uuids.dart';
+import '../../core/utils/device_id_generator.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/entities/scanned_device.dart';
@@ -291,10 +292,12 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
           await _prefs.setRtdbDeviceId(bleMac, storedId);
           debugPrint('[BLE] Recovered device ID from ESP: $bleMac → "$storedId"');
         } else {
-          // Pre-existing units (provisioned before multi-device) won't
-          // have a mapping yet — auto-assign 'g1' so they continue working.
-          await _prefs.setRtdbDeviceId(bleMac, 'g1');
-          debugPrint('[BLE] Legacy device — mapped $bleMac → "g1"');
+          // Firmware without 0x0C — derive the ID from the BLE
+          // identifier, same as provisioning does. Unlike a shared
+          // fallback ID, this stays unique per device.
+          final derived = deriveDeviceId(bleMac);
+          await _prefs.setRtdbDeviceId(bleMac, derived);
+          debugPrint('[BLE] No stored ID on ESP — derived $bleMac → "$derived"');
         }
       }
 

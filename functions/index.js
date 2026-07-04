@@ -378,9 +378,8 @@ exports.sendNotification = onCall(async (request) => {
  * HTTP endpoint for the ESP32 to send push notifications directly.
  *
  * Security layers:
- *   1. Shared secret read from Firebase Secret Manager (ESP_AUTH_KEY),
- *      with a fallback to the legacy hardcoded key so existing units
- *      keep working until the secret is provisioned.
+ *   1. Shared secret read from Firebase Secret Manager (ESP_AUTH_KEY).
+ *      No fallback — requests without the exact secret are rejected.
  *   2. userId must correspond to a real Firebase Auth account.
  *   3. Per-userId rate limit (max 10 requests / minute, in-memory).
  */

@@ -115,14 +115,51 @@ class FirebaseRtdbRepository implements RtdbRepository {
 
   @override
   Stream<DailyStats> watchTodayStats(String deviceId) {
-    final today = _dateKey(DateTime.now());
-    return _authed(() => _userRef()
-        .child('stats/$deviceId/$today')
-        .onValue
-        .map((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      return DailyStats.fromMap(data);
-    }));
+    // "Today" is re-evaluated at each local midnight: the underlying
+    // RTDB subscription is swapped to the new date node, so a screen
+    // left open overnight resets to the new day instead of silently
+    // continuing to show yesterday's stats.
+    return _authed(() {
+      late StreamController<DailyStats> controller;
+      StreamSubscription<DatabaseEvent>? sub;
+      Timer? rollover;
+
+      void subscribeForToday() {
+        final now = DateTime.now();
+        final key = _dateKey(now);
+
+        sub?.cancel();
+        sub = _userRef()
+            .child('stats/$deviceId/$key')
+            .onValue
+            .listen((event) {
+          final data = event.snapshot.value as Map<dynamic, dynamic>?;
+          controller.add(DailyStats.fromMap(data));
+        }, onError: controller.addError);
+
+        // Re-subscribe just after the next local midnight.
+        final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+        rollover?.cancel();
+        rollover = Timer(
+          nextMidnight.difference(now) + const Duration(seconds: 1),
+          () {
+            // Show the fresh (empty) day immediately; the new node's
+            // first event will overwrite this if data already exists.
+            controller.add(DailyStats.fromMap(null));
+            subscribeForToday();
+          },
+        );
+      }
+
+      controller = StreamController<DailyStats>(
+        onListen: subscribeForToday,
+        onCancel: () async {
+          rollover?.cancel();
+          await sub?.cancel();
+        },
+      );
+      return controller.stream;
+    });
   }
 
   // ── Meta ───────────────────────────────────────────────────────

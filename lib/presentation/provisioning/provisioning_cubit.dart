@@ -227,12 +227,21 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
         debugPrint('[Prov] WiFi not enabled — skipping Firebase auth');
       }
 
+      // The device ID is derived from the BLE identifier. Without it
+      // we cannot assign a unique RTDB identity — abort rather than
+      // fall back to a shared ID that would collide across devices.
       final bleMac = _ble.connectedDeviceId;
-      final deviceId = bleMac != null ? deriveDeviceId(bleMac) : 'g1';
       if (bleMac == null) {
-        debugPrint('[Prov] WARNING: connectedDeviceId is null — '
-            'falling back to device ID "g1"');
+        _timeout?.cancel();
+        emit(state.copyWith(
+          step: ProvisioningStep.result,
+          deviceStatus: ProvisioningStatus.error,
+          errorMessage:
+              'Lost connection to the device — reconnect and try again',
+        ));
+        return;
       }
+      final deviceId = deriveDeviceId(bleMac);
 
       await _prov.provision(
         deviceNickname: state.deviceNickname,
@@ -243,22 +252,25 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
         refreshToken: refreshToken,
       );
 
-      if (bleMac != null) {
-        await _prefs.setRtdbDeviceId(bleMac, deviceId);
-        final nick = state.deviceNickname.isNotEmpty
-            ? state.deviceNickname
-            : 'My Geyser';
-        await _prefs.setDeviceNickname(deviceId, nick);
+      await _prefs.setRtdbDeviceId(bleMac, deviceId);
+      final nick = state.deviceNickname.isNotEmpty
+          ? state.deviceNickname
+          : 'My Geyser';
+      await _prefs.setDeviceNickname(deviceId, nick);
 
-        _registry.addDevice(DeviceInfo(
-          rtdbDeviceId: deviceId,
-          bleMac: bleMac,
-          nickname: nick,
-        ));
+      _registry.addDevice(DeviceInfo(
+        rtdbDeviceId: deviceId,
+        bleMac: bleMac,
+        nickname: nick,
+      ));
 
-        final uid = state.firebaseUid;
-        if (uid != null) {
-          FirebaseFirestore.instance.doc('users/$uid').set({
+      // Best-effort registry write — provisioning has already
+      // succeeded on the device, so a Firestore hiccup is logged
+      // rather than surfaced as a provisioning failure.
+      final uid = state.firebaseUid;
+      if (uid != null) {
+        try {
+          await FirebaseFirestore.instance.doc('users/$uid').set({
             'devices': {
               deviceId: {
                 'pairedAt': FieldValue.serverTimestamp(),
@@ -268,6 +280,8 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
             },
             'hasDevice': true,
           }, SetOptions(merge: true));
+        } catch (e) {
+          debugPrint('[Prov] Firestore device registry write failed: $e');
         }
       }
     } catch (e) {

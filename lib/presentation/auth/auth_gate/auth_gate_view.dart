@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../di/locator.dart';
 import '../../../domain/auth/auth_gate/auth_gate_decision.dart';
-import '../../app/home_page.dart';
+import '../../dashboard/dashboard_page.dart';
 import '../auth_flow_view.dart';
 import 'auth_gate_cubit.dart';
 
@@ -29,7 +29,7 @@ class AuthGateView extends StatelessWidget {
             case AuthGateDecision.forceUpgrade:
               return const Scaffold(body: Center(child: Text('Update required')));
             case AuthGateDecision.ready:
-              return const HomePage();
+              return const DashboardPage();
           }
         },
       ),

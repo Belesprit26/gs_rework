@@ -6,6 +6,7 @@ import '../../core/ble/gatt_uuids.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/geyser/repositories/geyser_control_repository.dart';
+import '../../domain/geyser/temp_limits.dart';
 
 /// Translates between [GeyserControlRepository] domain types and raw BLE bytes.
 ///
@@ -98,13 +99,12 @@ class BleGeyserControlRepository implements GeyserControlRepository {
     required int max,
     required bool autoReheat,
   }) async {
+    // Same clamp the firmware applies (range + deadband), so the bytes
+    // we send are exactly what the device will keep.
+    final (min: mn, max: mx) = clampTempLimits(min: min, max: max);
     await _ble.writeCharacteristic(
       GattUuids.tempLimits.str,
-      Uint8List.fromList([
-        min.clamp(5, 50),
-        max.clamp(51, 65),
-        autoReheat ? 1 : 0,
-      ]),
+      Uint8List.fromList([mn, mx, autoReheat ? 1 : 0]),
     );
   }
 

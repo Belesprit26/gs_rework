@@ -87,29 +87,39 @@ Last updated: 2026-07-01
   now synced-only (7 d) with a 60-day absolute backstop, and run *after* the
   sync. Legacy merged files are left as frozen archives; nothing reads them.
   Covered by the repo's first unit tests (lock, prune, chunk paths, codec).
-- [ ] **[audit] `current_sense.c` is dead code** — not in `main/CMakeLists.txt`
-  SRCS, referenced by nothing. Element/relay current-failure detection ships
-  dark. Wire it in or remove it.
+- [x] **[audit] `current_sense.c` — resolved as documented staging (2026-07-04).**
+  Deliberately excluded from the build: the CT hardware is still under
+  evaluation (HARDWARE_ROADMAP.md → "Current sensor evaluation", open BOM
+  decision). The file now carries a "STAGED, NOT IN THE BUILD" header; add it
+  to SRCS + init from `app_main` if/when the CT clamp lands on the BOM.
 
 ## Should fix (Medium)
 
-- [ ] **[audit] `main()` has no init error guard** (`main.dart`) — a throw from
-  `Firebase.initializeApp` or `PushNotificationManager.initialize()` kills app
-  launch. Wrap in try/catch / `runZonedGuarded`.
+- [x] **[audit] `main()` init error guard — fixed 2026-07-04.** Non-critical
+  startup steps (telemetry recorder, notification service, FCM, sync
+  orchestrator, workmanager) each run through `_guardedStart`: a failure is
+  logged + reported to Crashlytics (non-fatal) and launch continues. Firebase
+  init + DI stay fail-loud (nothing works without them).
 - [ ] **[audit] No battery-backed RTC** — after a power cut the clock is invalid
   until NTP (needs WiFi) or a BLE time write, so scheduled heating silently
-  won't fire. Significant in a load-shedding market.
-- [ ] **[audit] `'g1'` device-ID fallback collides** — multiple unprovisioned/
-  legacy devices per user all map to `g1` (same RTDB path). (Cross-platform iOS
-  is otherwise handled well via the `0x0C` stored-ID recovery.)
-- [ ] **[audit] Effectively no test coverage** — one default `widget_test.dart`.
-  Add unit tests for the thermostat/deadband bounds, BLE byte codecs, and
-  security rules (emulator).
-- [ ] Fix `checkDeviceOffline` to track `offlineNotified` per-device —
-  **already done** in `index.js` (`meta/offlineNotified/{did}`); this line was
+  won't fire. Significant in a load-shedding market. (Hardware — see roadmap.)
+- [x] **[audit] `'g1'` device-ID fallback collision — fixed 2026-07-04.**
+  Provisioning now aborts with a clear error if the BLE identifier is missing
+  (instead of provisioning under a shared ID), and the legacy no-`0x0C`
+  fallback derives the ID from the BLE identifier (unique per device) instead
+  of mapping everything to `g1`. The provisioning Firestore registry write is
+  now awaited + error-contained.
+- [ ] **[audit] Test coverage** — improved (sync lock, prune semantics, chunk
+  paths, codec, temp-limit clamp), still missing: cubit tests, security-rules
+  emulator tests.
+- [x] Fix `checkDeviceOffline` to track `offlineNotified` per-device —
+  **already done** in `index.js` (`meta/offlineNotified/{did}`); the line was
   stale.
-- [ ] Remove dead code (firmware: unused functions; app: `HomePage` wrapper, `agent_log`)
-- [ ] Fix deprecated `isInDebugMode` in WorkManager config
+- [x] Remove dead code — done 2026-07-04. App: `HomePage` wrapper removed
+  (auth gate returns `DashboardPage` directly); `agent_log` and the Devices-tab
+  placeholder no longer exist (stale entries). Firmware: see table below.
+- [x] Fix deprecated `isInDebugMode` in WorkManager config — parameter removed
+  (deprecated and a no-op in the current workmanager).
 - [x] Scope `profile_pics` storage rule — `storage.rules` no longer exposes it
   (now only `firmware/` + per-user `telemetry/`)
 - [x] Add `firestore.rules` to the repo — present and well-scoped
@@ -118,13 +128,17 @@ Last updated: 2026-07-01
 
 - [ ] **[audit] Hardcoded `TZ=SAST-2`** (`time_sync.c`) — schedules are wrong
   outside South Africa. Make timezone configurable if expanding.
-- [ ] **[audit] Mirror the 5 °C deadband in the app's `setTempLimits`** so the UI
-  can't briefly show a value the firmware will override.
-- [ ] **[audit] `watchTodayStats` captures "today" at subscribe time** — no
-  midnight rollover while the app stays open.
+- [x] **[audit] 5 °C deadband mirrored in the app — done 2026-07-04.** Shared
+  `clampTempLimits()` in `domain/geyser/temp_limits.dart` (same constants +
+  order of operations as the firmware clamp) applied in `GeyserControlCubit`
+  (covers both RTDB and BLE paths) and `BleGeyserControlRepository`. Unit
+  tests keep it in lockstep with `device_state.c`.
+- [x] **[audit] `watchTodayStats` midnight rollover — fixed 2026-07-04.** The
+  RTDB subscription now swaps to the new date node just after local midnight
+  and emits an empty-day reset immediately.
 - [ ] Split `dashboard_page.dart` into smaller widgets
 - [ ] Clean up legacy RTDB paths in `firebase_auth_repository.dart`
-- [ ] Fix firmware stack-size comment inconsistency
+- [x] Fix firmware stack-size comment inconsistency — comment now says 12 KB.
 - [ ] Set up l10n if targeting multiple languages
 
 ## Corrections to prior claims
@@ -137,24 +151,25 @@ Last updated: 2026-07-01
 - ~~"Perfect as-is: `temperature.c`"~~ — the thermostat was correct but the
   max-on backstop had the two safety gaps fixed above.
 
-## Firmware dead code to clean up
+## Firmware dead code — status after 2026-07-04 cleanup
 
-| Item | File |
-|------|------|
-| `current_sense.c` (whole file) | **[audit]** not compiled — absent from `CMakeLists.txt` SRCS |
-| `time_sync_stop_sntp()` | `time_sync.c` — declared, implemented, never called |
-| `firebase_rtdb_sync_relay()` | `firebase_rtdb.c` — declared, implemented, never called |
-| `wifi_prov_reset()`, `wifi_prov_event_group()`, `wifi_prov_is_connected()` | `wifi_prov.c` — never called (factory reset uses `nvs_flash_erase()` in `button.c` instead) |
-| GATT 0x07 telemetry characteristic | `gatt_server.c` — stub, always returns empty |
-| Stale comment "8 KB stack" | `firebase_rtdb.c` — task actually uses 12 KB |
+| Item | Status |
+|------|--------|
+| `current_sense.c` (whole file) | **Kept, documented** — staged for the CT-hardware BOM decision (header note added) |
+| `time_sync_stop_sntp()` | Already gone — stale entry |
+| `firebase_rtdb_sync_relay()` | Already gone — stale entry |
+| `wifi_prov_is_connected()`, `wifi_prov_event_group()` | **Removed**, along with the write-only `s_wifi_event_group` plumbing + `WIFI_EVT_CONNECTED` |
+| `wifi_prov_reset()` | **Kept deliberately** — header documents it as reserved for the re-provisioning / owner-unbind flow (needed by the upcoming BLE owner-lock) |
+| GATT 0x07 telemetry characteristic | **Removed** (uuid, stub callback, table entry) — no app consumer existed; buffered telemetry is 0x0A |
+| Stale comment "8 KB stack" | **Fixed** — now 12 KB |
 
-## App dead/redundant code
+## App dead/redundant code — status after 2026-07-04 cleanup
 
-| Item | Location |
-|------|----------|
-| `HomePage` | Only wraps `DashboardPage` — redundant layer |
-| `agent_log` / `agent_log_scope` | `lib/core/` — not referenced anywhere |
-| Devices tab | `Center(child: Text('Devices – coming soon'))` — placeholder |
+| Item | Status |
+|------|--------|
+| `HomePage` | **Removed** — auth gate returns `DashboardPage` directly |
+| `agent_log` / `agent_log_scope` | Never existed in this repo — stale entry |
+| Devices tab placeholder | Already replaced by the Device Management page — stale entry |
 
 ## Security rules gaps
 
