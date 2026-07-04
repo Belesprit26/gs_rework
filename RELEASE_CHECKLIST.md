@@ -73,11 +73,20 @@ Last updated: 2026-07-01
   refresh token cross this un-authenticated link at provisioning time. Options:
   reject re-provisioning once owned, gate advertising post-provision, or
   app-layer-encrypt the provisioning payload with a per-device secret (QR).
-- [ ] **[audit] Telemetry cloud sync is fragile** (`cloud_storage_sync_repository.dart`):
-  read-modify-write of one per-device `.ndjson.gz` with (a) no concurrency guard
-  in `SyncOrchestrator` → concurrent syncs lose data, (b) a hard 10 MB
-  `getData` cap → sync breaks permanently once the file grows past it, no
-  rotation, (c) crash between upload and `markSynced` → duplicate records.
+- [x] **[audit] Telemetry cloud sync durability — fixed 2026-07-04.** Replaced
+  the read-modify-write merged file with immutable NDJSON chunk objects
+  (`telemetry/{uid}/{deviceId}/{utcTs}_{nonce}.ndjson.gz`): no download step
+  (10 MB ceiling and quadratic re-upload gone), concurrent writers (isolates or
+  two phones on one account) can no longer clobber each other, and a crash
+  between upload and `markSynced` now yields a dedup-able duplicate chunk
+  instead of data loss. Added a cross-isolate `SyncLock` (atomic exclusive
+  file create + stale takeover) so main-isolate and workmanager syncs
+  serialize; per-device failure isolation + drain loop; `prefs.reload()`
+  before retry checks. **Also fixed:** retention pruning deleted records
+  older than 7 days *before* sync and regardless of sync state — prunes are
+  now synced-only (7 d) with a 60-day absolute backstop, and run *after* the
+  sync. Legacy merged files are left as frozen archives; nothing reads them.
+  Covered by the repo's first unit tests (lock, prune, chunk paths, codec).
 - [ ] **[audit] `current_sense.c` is dead code** — not in `main/CMakeLists.txt`
   SRCS, referenced by nothing. Element/relay current-failure detection ships
   dark. Wire it in or remove it.

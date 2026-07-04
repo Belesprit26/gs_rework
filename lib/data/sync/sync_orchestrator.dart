@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/debug/debug_log.dart';
 import '../../domain/telemetry/repositories/telemetry_sync_repository.dart';
 import '../local/prefs_manager.dart';
+import 'sync_lock.dart';
 
 /// Orchestrates the telemetry + notification sync lifecycle:
 ///
@@ -11,6 +12,11 @@ import '../local/prefs_manager.dart';
 /// 2. If the midnight push fails → sets a "pending retry" flag.
 /// 3. Listens to connectivity changes → retries on first WiFi connection.
 /// 4. On success → clears the retry flag.
+///
+/// All entry points (main isolate and the workmanager background
+/// isolate) serialize through a cross-isolate [SyncLock], so at most
+/// one sync runs at a time. If the lock is held, the attempt is simply
+/// skipped — the holder is already doing the work.
 ///
 /// This class is designed to be called from both:
 /// - A running app (via DI singleton)
@@ -20,13 +26,16 @@ class SyncOrchestrator {
     required TelemetrySyncRepository syncRepository,
     required PrefsManager prefsManager,
     Connectivity? connectivity,
+    SyncLock? syncLock,
   })  : _sync = syncRepository,
         _prefs = prefsManager,
-        _connectivity = connectivity ?? Connectivity();
+        _connectivity = connectivity ?? Connectivity(),
+        _lock = syncLock;
 
   final TelemetrySyncRepository _sync;
   final PrefsManager _prefs;
   final Connectivity _connectivity;
+  SyncLock? _lock;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
@@ -51,31 +60,18 @@ class SyncOrchestrator {
 
   /// Execute the sync. Called by workmanager at midnight or manually.
   ///
-  /// Returns true if sync succeeded, false if it needs WiFi retry.
+  /// Returns true if sync succeeded (or was skipped because another
+  /// sync already holds the lock), false if it needs WiFi retry.
   Future<bool> attemptSync() async {
-    try {
-      final hasPending = await _sync.hasPendingRecords;
-      if (!hasPending) {
-        debugLog('SyncOrchestrator', 'No pending records');
-        return true;
-      }
-
-      final count = await _sync.syncUnsyncedRecords();
-
-      // Record success.
-      await _prefs.setLastSyncTime(DateTime.now().toUtc());
-      await _prefs.setPendingRetry(false);
-
-      debugLog('SyncOrchestrator', 'Synced $count records');
-
+    final lock = _lock ??= await SyncLock.inDocumentsDir();
+    if (!await lock.tryAcquire()) {
+      debugLog('SyncOrchestrator', 'Sync already running — skipped');
       return true;
-    } catch (e) {
-      debugLog('SyncOrchestrator', 'Sync failed: $e — will retry on WiFi');
-
-      // Mark for WiFi retry.
-      await _prefs.setPendingRetry(true);
-
-      return false;
+    }
+    try {
+      return await _runSync(_sync, _prefs);
+    } finally {
+      await lock.release();
     }
   }
 
@@ -88,31 +84,63 @@ class SyncOrchestrator {
     required TelemetrySyncRepository syncRepository,
     required PrefsManager prefsManager,
   }) async {
-    try {
-      final hasPending = await syncRepository.hasPendingRecords;
-      if (!hasPending) return true;
-
-      await syncRepository.syncUnsyncedRecords();
-
-      await prefsManager.setLastSyncTime(DateTime.now().toUtc());
-      await prefsManager.setPendingRetry(false);
-
+    final lock = await SyncLock.inDocumentsDir();
+    if (!await lock.tryAcquire()) {
+      debugLog('SyncOrchestrator:bg', 'Sync already running — skipped');
       return true;
-    } catch (e) {
-      debugLog('SyncOrchestrator:bg', 'Sync failed: $e');
-
-      await prefsManager.setPendingRetry(true);
-
-      return false;
+    }
+    try {
+      return await _runSync(syncRepository, prefsManager, tag: ':bg');
+    } finally {
+      await lock.release();
     }
   }
 
   // ── Private ───────────────────────────────────────────────────────
 
+  /// The actual sync body, shared by both entry points. Assumes the
+  /// caller holds the [SyncLock].
+  static Future<bool> _runSync(
+    TelemetrySyncRepository sync,
+    PrefsManager prefs, {
+    String tag = '',
+  }) async {
+    try {
+      final hasPending = await sync.hasPendingRecords;
+      if (!hasPending) {
+        debugLog('SyncOrchestrator$tag', 'No pending records');
+        return true;
+      }
+
+      final count = await sync.syncUnsyncedRecords();
+
+      // Record success.
+      await prefs.setLastSyncTime(DateTime.now().toUtc());
+      await prefs.setPendingRetry(false);
+
+      debugLog('SyncOrchestrator$tag', 'Synced $count records');
+
+      return true;
+    } catch (e) {
+      debugLog('SyncOrchestrator$tag', 'Sync failed: $e — will retry on WiFi');
+
+      // Mark for WiFi retry. Partial progress is already durable:
+      // uploaded chunks stay uploaded and their records stay marked
+      // synced, so the retry only re-attempts what actually failed.
+      await prefs.setPendingRetry(true);
+
+      return false;
+    }
+  }
+
   Future<void> _onConnectivityChanged(List<ConnectivityResult> results) async {
     final hasWifi = results.contains(ConnectivityResult.wifi);
     if (!hasWifi) return;
 
+    // The background isolate writes the retry flag through its own
+    // SharedPreferences instance; reload so this isolate's cache
+    // doesn't miss it.
+    await _prefs.reload();
     if (!_prefs.hasPendingRetry) return;
 
     debugLog('SyncOrchestrator', 'WiFi detected — retrying sync');
@@ -121,6 +149,7 @@ class SyncOrchestrator {
   }
 
   Future<void> _checkPendingRetry() async {
+    await _prefs.reload();
     if (!_prefs.hasPendingRetry) return;
 
     // Check current connectivity.

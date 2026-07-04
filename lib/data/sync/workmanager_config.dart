@@ -92,14 +92,21 @@ void _callbackDispatcher() {
         notificationRepository: notificationRepo,
       );
 
-      // Prune old records while we're at it (both tables).
-      await telemetryRepo.pruneOlderThan(retentionDays: 7);
-      await notificationRepo.pruneOlderThan(retentionDays: 7);
-
       final success = await SyncOrchestrator.executeBackgroundSync(
         syncRepository: syncRepo,
         prefsManager: prefsManager,
       );
+
+      // Prune AFTER syncing, and only records that made it to the
+      // cloud — unsynced data must never be lost to retention.
+      await telemetryRepo.pruneOlderThan(retentionDays: 7);
+      await notificationRepo.pruneOlderThan(retentionDays: 7);
+
+      // Absolute backstop: bound local growth even if sync is
+      // permanently broken (e.g. account signed out for months).
+      await telemetryRepo.pruneOlderThan(retentionDays: 60, onlySynced: false);
+      await notificationRepo.pruneOlderThan(
+          retentionDays: 60, onlySynced: false);
 
       // Close the database.
       await db.close();

@@ -43,7 +43,11 @@ abstract class NotificationRepository {
   Future<void> markSynced(List<int> ids);
 
   /// Delete notifications older than [retentionDays] days.
-  Future<int> pruneOlderThan({int retentionDays = 7});
+  ///
+  /// By default only **synced** notifications are deleted, so events
+  /// that have not reached the cloud yet are never lost to retention.
+  /// Pass [onlySynced] = false for the absolute backstop prune.
+  Future<int> pruneOlderThan({int retentionDays = 7, bool onlySynced = true});
 
   /// Delete all notifications (for development/reset).
   Future<void> deleteAll();

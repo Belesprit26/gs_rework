@@ -35,6 +35,12 @@ class PrefsManager {
     await _prefs.remove(_kPairedName);
   }
 
+  /// Re-read values from the platform store. Needed before checking
+  /// flags that the workmanager background isolate may have written
+  /// through its own SharedPreferences instance (this isolate's cache
+  /// would otherwise be stale).
+  Future<void> reload() => _prefs.reload();
+
   // ── Sync Orchestrator ────────────────────────────────────────────
 
   static const _kPendingRetry = 'sync_pending_wifi_retry';

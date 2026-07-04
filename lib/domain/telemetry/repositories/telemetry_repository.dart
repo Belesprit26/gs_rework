@@ -35,7 +35,12 @@ abstract class TelemetryRepository {
   // ── Maintenance ───────────────────────────────────────────────────
 
   /// Delete records older than [retentionDays] (default 7).
-  Future<int> pruneOlderThan({int retentionDays = 7});
+  ///
+  /// By default only **synced** records are deleted, so data that has
+  /// not reached the cloud yet is never lost to retention. Pass
+  /// [onlySynced] = false for the absolute backstop prune (e.g. 60
+  /// days) that bounds local growth even if sync is permanently broken.
+  Future<int> pruneOlderThan({int retentionDays = 7, bool onlySynced = true});
 
   /// Delete all records (for testing / reset).
   Future<void> deleteAll();
