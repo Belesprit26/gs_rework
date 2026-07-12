@@ -8,7 +8,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
 import '../../core/ble/gatt_uuids.dart';
+import '../../core/ble/owner_auth_codec.dart';
 import '../../core/utils/device_id_generator.dart';
+import '../../data/ble/ble_owner_auth.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../data/provisioning/ble_provisioning_repository.dart';
 import '../../domain/auth/repositories/auth_repository.dart';
@@ -32,11 +34,13 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
     required BleRepository bleRepository,
     required PrefsManager prefsManager,
     required DeviceRegistryCubit deviceRegistry,
+    required BleOwnerAuth ownerAuth,
   })  : _prov = provisioningRepository,
         _auth = authRepository,
         _ble = bleRepository,
         _prefs = prefsManager,
         _registry = deviceRegistry,
+        _ownerAuth = ownerAuth,
         super(const ProvisioningState());
 
   final BleProvisioningRepository _prov;
@@ -44,6 +48,7 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
   final BleRepository _ble;
   final PrefsManager _prefs;
   final DeviceRegistryCubit _registry;
+  final BleOwnerAuth _ownerAuth;
   StreamSubscription<ProvisioningStatus>? _statusSub;
   Timer? _timeout;
 
@@ -243,6 +248,11 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
       }
       final deviceId = deriveDeviceId(bleMac);
 
+      // BLE owner-lock: a fresh 32-byte key per provisioning. The
+      // device stores it in NVS; every phone signed into this account
+      // retrieves it from Firestore to unlock BLE control.
+      final ownerKey = generateOwnerKey();
+
       await _prov.provision(
         deviceNickname: state.deviceNickname,
         firebaseUid: state.firebaseUid ?? 'unknown',
@@ -250,7 +260,13 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
         wifiSsid: sendWifi ? state.ssid : null,
         wifiPassword: sendWifi ? state.wifiPassword : null,
         refreshToken: refreshToken,
+        ownerKey: ownerKey,
       );
+
+      // Persist the key (prefs + account Firestore scope) right after
+      // it reached the device — even if WiFi provisioning fails later,
+      // both sides now hold the same key, so retries stay unlocked.
+      await _ownerAuth.storeKey(rtdbDeviceId: deviceId, key: ownerKey);
 
       await _prefs.setRtdbDeviceId(bleMac, deviceId);
       final nick = state.deviceNickname.isNotEmpty

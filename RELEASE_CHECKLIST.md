@@ -66,13 +66,21 @@ Last updated: 2026-07-01
 
 ## High
 
-- [ ] **[audit] BLE has no owner lock** — Just Works pairing (`sm_mitm = 0`,
-  `NO_IO`) + advertises forever + `on_user_bind` never checks "already
-  provisioned". Any phone in range can pair and toggle the relay, and a paired
-  peer can **re-bind a deployed unit to their own account** (hijack). WiFi creds +
-  refresh token cross this un-authenticated link at provisioning time. Options:
-  reject re-provisioning once owned, gate advertising post-provision, or
-  app-layer-encrypt the provisioning payload with a per-device secret (QR).
+- [x] **[audit] BLE owner-lock — implemented 2026-07-13.** A random 32-byte
+  device key is generated at provisioning, written to the ESP (0x16, NVS) and
+  stored in the account's Firestore scope (`users/{uid}/geyser_config/{did}`).
+  Control + provisioning writes are gated behind an HMAC-SHA256
+  challenge-response (0x0E): any phone signed into the household account fetches
+  the key and unlocks (then works offline via a local cache); a stranger's phone
+  is refused (`INSUFFICIENT_AUTHOR`). **Hijack fixed:** `on_user_bind` and the
+  WiFi/nickname/auth/SSID characteristics now require an owner-unlocked session
+  once provisioned. Multi-phone by construction (one login = full BLE + cloud
+  control), key rotation via Device Management → "Reset access key", ownership
+  transfer via the physical factory-reset. Reads (temp/state/events) stay open.
+  App + firmware HMAC pinned to a shared RFC 4231 test vector.
+  - Residual (documented, accepted): the one-time provisioning window is still
+    Just Works (NO_IO hardware) — an active MITM present at first setup could
+    capture the key. Cross-*account* sharing with roles is a future phase.
 - [x] **[audit] Telemetry cloud sync durability — fixed 2026-07-04.** Replaced
   the read-modify-write merged file with immutable NDJSON chunk objects
   (`telemetry/{uid}/{deviceId}/{utcTs}_{nonce}.ndjson.gz`): no download step

@@ -95,4 +95,18 @@ abstract final class GattUuids {
   /// Max-on safety timer — Read, Write (encrypted).
   /// Format: uint16 LE — minutes (0 = disabled).
   static final maxOnTimer = Guid('4753000d-7652-4543-b201-c4b801a6c700');
+
+  // ── Owner lock ───────────────────────────────────────────────────
+
+  /// Owner auth — Read (challenge), Write (response), encrypted.
+  /// Read returns a fresh 16-byte nonce; write the 32-byte
+  /// HMAC-SHA256(ownerKey, nonce) to unlock this connection.
+  /// Gated writes fail with ATT "insufficient authorization" until
+  /// unlocked.
+  static final ownerAuth = Guid('4753000e-7652-4543-b201-c4b801a6c700');
+
+  /// Owner key — Write only (encrypted), provisioning service.
+  /// Exactly 32 random bytes. Written at provisioning (open while the
+  /// device is unprovisioned) and on key rotation (requires unlock).
+  static final provOwnerKey = Guid('47530016-7652-4543-b201-c4b801a6c700');
 }

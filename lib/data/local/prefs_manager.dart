@@ -61,6 +61,20 @@ class PrefsManager {
     await _prefs.setString(_kLastSync, time.toUtc().toIso8601String());
   }
 
+  // ── BLE owner key cache ──────────────────────────────────────────
+  //
+  // Base64 of the 32-byte device key, cached per RTDB device ID after
+  // the first Firestore fetch so BLE unlock works fully offline.
+
+  static const _kOwnerKeyPrefix = 'ble_owner_key_';
+
+  String? getBleOwnerKey(String rtdbDeviceId) =>
+      _prefs.getString('$_kOwnerKeyPrefix$rtdbDeviceId');
+
+  Future<void> setBleOwnerKey(String rtdbDeviceId, String base64Key) async {
+    await _prefs.setString('$_kOwnerKeyPrefix$rtdbDeviceId', base64Key);
+  }
+
   // ── Notification Preferences ─────────────────────────────────────
 
   static const _kNotifPrefix = 'notif_enabled_';
