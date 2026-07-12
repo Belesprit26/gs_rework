@@ -7,6 +7,7 @@ import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:get_it/get_it.dart';
 
+import '../data/ble/ble_owner_auth.dart';
 import '../data/ble/flutter_blue_plus_ble_repository.dart';
 import '../data/ble/mock_ble_repository.dart';
 import '../data/firebase/auth/firebase_auth_repository.dart';
@@ -75,6 +76,17 @@ Future<void> registerData(GetIt getIt) async {
   // BLE
   getIt.registerLazySingleton<BleRepository>(
     () => _useMockBle ? MockBleRepository() : FlutterBluePlusBleRepository(),
+  );
+
+  // BLE owner-lock — challenge-response unlock + key distribution
+  // through the account's Firestore scope.
+  getIt.registerLazySingleton<BleOwnerAuth>(
+    () => BleOwnerAuth(
+      bleRepository: getIt<BleRepository>(),
+      auth: getIt<FirebaseAuth>(),
+      firestore: getIt<FirebaseFirestore>(),
+      prefsManager: getIt<PrefsManager>(),
+    ),
   );
 
   // Provisioning

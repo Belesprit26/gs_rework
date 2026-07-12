@@ -275,6 +275,7 @@ class _SingleDeviceHome extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
+            if (bleState.isOwnerLocked) const _OwnerLockedBanner(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 46),
               child: GeyserFocalCard(
@@ -1476,6 +1477,42 @@ class _CustomTimerRow extends StatelessWidget {
           Switch(
             value: timer.enabled,
             onChanged: onToggle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when connected over BLE to a geyser this phone isn't
+/// authorized to control (owner-lock). Reads and remote/cloud control
+/// still work; only local BLE commands are blocked.
+class _OwnerLockedBanner extends StatelessWidget {
+  const _OwnerLockedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, color: cs.onErrorContainer, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'This GeyserSwitch is registered to another account. '
+              'Sign in with the owning account, or hold the device button '
+              '10s to factory-reset and claim it.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onErrorContainer,
+                  ),
+            ),
           ),
         ],
       ),

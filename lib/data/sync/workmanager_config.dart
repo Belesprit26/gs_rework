@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../../core/debug/debug_log.dart';
@@ -24,10 +23,7 @@ const String kDailySyncTaskId = 'com.geyserswitch.dailySync';
 ///
 /// Call once from main.dart.
 Future<void> initializeWorkmanager() async {
-  await Workmanager().initialize(
-    _callbackDispatcher,
-    isInDebugMode: kDebugMode,
-  );
+  await Workmanager().initialize(_callbackDispatcher);
 
   // Register a daily periodic task.
   // On Android this uses WorkManager's PeriodicWorkRequest.
@@ -92,14 +88,21 @@ void _callbackDispatcher() {
         notificationRepository: notificationRepo,
       );
 
-      // Prune old records while we're at it (both tables).
-      await telemetryRepo.pruneOlderThan(retentionDays: 7);
-      await notificationRepo.pruneOlderThan(retentionDays: 7);
-
       final success = await SyncOrchestrator.executeBackgroundSync(
         syncRepository: syncRepo,
         prefsManager: prefsManager,
       );
+
+      // Prune AFTER syncing, and only records that made it to the
+      // cloud — unsynced data must never be lost to retention.
+      await telemetryRepo.pruneOlderThan(retentionDays: 7);
+      await notificationRepo.pruneOlderThan(retentionDays: 7);
+
+      // Absolute backstop: bound local growth even if sync is
+      // permanently broken (e.g. account signed out for months).
+      await telemetryRepo.pruneOlderThan(retentionDays: 60, onlySynced: false);
+      await notificationRepo.pruneOlderThan(
+          retentionDays: 60, onlySynced: false);
 
       // Close the database.
       await db.close();

@@ -7,6 +7,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/ble/gatt_uuids.dart';
+import '../../core/utils/device_id_generator.dart';
+import '../../data/ble/ble_owner_auth.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/entities/scanned_device.dart';
@@ -31,10 +33,12 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
     required BleRepository bleRepository,
     required PrefsManager prefsManager,
     required DeviceRegistryCubit deviceRegistry,
+    required BleOwnerAuth ownerAuth,
     Connectivity? connectivity,
   })  : _ble = bleRepository,
         _prefs = prefsManager,
         _registry = deviceRegistry,
+        _ownerAuth = ownerAuth,
         _connectivity = connectivity ?? Connectivity(),
         super(BleConnectionState(
           isBluetoothOn: bleRepository.isAdapterOn,
@@ -49,6 +53,7 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
   final BleRepository _ble;
   final PrefsManager _prefs;
   final DeviceRegistryCubit _registry;
+  final BleOwnerAuth _ownerAuth;
   final Connectivity _connectivity;
   StreamSubscription<BleConnectionStatus>? _statusSub;
   StreamSubscription<bool>? _adapterSub;
@@ -291,17 +296,20 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
           await _prefs.setRtdbDeviceId(bleMac, storedId);
           debugPrint('[BLE] Recovered device ID from ESP: $bleMac → "$storedId"');
         } else {
-          // Pre-existing units (provisioned before multi-device) won't
-          // have a mapping yet — auto-assign 'g1' so they continue working.
-          await _prefs.setRtdbDeviceId(bleMac, 'g1');
-          debugPrint('[BLE] Legacy device — mapped $bleMac → "g1"');
+          // Firmware without 0x0C — derive the ID from the BLE
+          // identifier, same as provisioning does. Unlike a shared
+          // fallback ID, this stays unique per device.
+          final derived = deriveDeviceId(bleMac);
+          await _prefs.setRtdbDeviceId(bleMac, derived);
+          debugPrint('[BLE] No stored ID on ESP — derived $bleMac → "$derived"');
         }
       }
 
       // Persist the nickname and update the live device registry so
       // multi-device PageView stays current without needing an app restart.
+      String? rtdbId;
       if (bleMac != null) {
-        final rtdbId = _prefs.getRtdbDeviceId(bleMac)!;
+        rtdbId = _prefs.getRtdbDeviceId(bleMac)!;
         final nick = (nickname != null && nickname.isNotEmpty)
             ? nickname
             : 'My Geyser';
@@ -316,9 +324,28 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
 
       debugPrint('[BLE] Device info: nick="$nickname", '
           'wifi=$isWifi, ssid="$ssid", prov=$provStatus');
+
+      // Owner-lock: prove this phone belongs to the household account
+      // so control writes are accepted. Runs after the device ID is
+      // resolved (unlock needs it to find the key).
+      if (rtdbId != null) {
+        await _runOwnerUnlock(rtdbId);
+      }
     } catch (e) {
       // Non-fatal — device may not have provisioning service yet.
       debugPrint('[BLE] Failed to read device info: $e');
+    }
+  }
+
+  /// Run the owner-lock challenge-response and reflect the outcome in
+  /// state so the UI can show a "locked" notice when appropriate.
+  Future<void> _runOwnerUnlock(String rtdbDeviceId) async {
+    final result = await _ownerAuth.unlock(rtdbDeviceId);
+    if (isClosed) return;
+    emit(state.copyWith(ownerUnlock: result));
+    if (result == OwnerUnlockResult.locked ||
+        result == OwnerUnlockResult.noKey) {
+      debugPrint('[BLE] Owner-lock: control disabled ($result)');
     }
   }
 

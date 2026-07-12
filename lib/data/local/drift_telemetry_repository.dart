@@ -93,11 +93,17 @@ class DriftTelemetryRepository implements TelemetryRepository {
   // ── Maintenance ───────────────────────────────────────────────────
 
   @override
-  Future<int> pruneOlderThan({int retentionDays = 7}) async {
+  Future<int> pruneOlderThan({
+    int retentionDays = 7,
+    bool onlySynced = true,
+  }) async {
     final cutoff = DateTime.now().toUtc().subtract(Duration(days: retentionDays));
-    return await (_db.delete(_db.telemetryEntries)
-          ..where((t) => t.timestamp.isSmallerThanValue(cutoff)))
-        .go();
+    final query = _db.delete(_db.telemetryEntries)
+      ..where((t) => t.timestamp.isSmallerThanValue(cutoff));
+    if (onlySynced) {
+      query.where((t) => t.synced.equals(true));
+    }
+    return await query.go();
   }
 
   @override

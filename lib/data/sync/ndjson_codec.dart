@@ -7,7 +7,7 @@ import '../../domain/telemetry/entities/telemetry_record.dart';
 
 /// Encodes telemetry and notification records to NDJSON and compresses.
 ///
-/// Both record types live in the same cloud file, differentiated by the
+/// Both record types live in the same cloud chunk, differentiated by the
 /// `k` (kind) field:
 /// - `"t"` = telemetry
 /// - `"n"` = notification
@@ -72,20 +72,5 @@ abstract final class NdjsonCodec {
     final raw = utf8.encode(ndjson);
     final compressed = gzip.encode(raw);
     return Uint8List.fromList(compressed);
-  }
-
-  /// Decompress gzipped bytes to an NDJSON string.
-  static String gzipDecode(Uint8List compressed) {
-    final raw = gzip.decode(compressed);
-    return utf8.decode(raw);
-  }
-
-  /// Append new NDJSON lines to existing content.
-  /// If [existing] is null or empty, just returns [newLines].
-  static String append(String? existing, String newLines) {
-    if (existing == null || existing.isEmpty) return newLines;
-    // Ensure existing ends with newline before appending.
-    final base = existing.endsWith('\n') ? existing : '$existing\n';
-    return '$base$newLines';
   }
 }

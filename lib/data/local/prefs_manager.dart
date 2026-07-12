@@ -35,6 +35,12 @@ class PrefsManager {
     await _prefs.remove(_kPairedName);
   }
 
+  /// Re-read values from the platform store. Needed before checking
+  /// flags that the workmanager background isolate may have written
+  /// through its own SharedPreferences instance (this isolate's cache
+  /// would otherwise be stale).
+  Future<void> reload() => _prefs.reload();
+
   // ── Sync Orchestrator ────────────────────────────────────────────
 
   static const _kPendingRetry = 'sync_pending_wifi_retry';
@@ -53,6 +59,20 @@ class PrefsManager {
 
   Future<void> setLastSyncTime(DateTime time) async {
     await _prefs.setString(_kLastSync, time.toUtc().toIso8601String());
+  }
+
+  // ── BLE owner key cache ──────────────────────────────────────────
+  //
+  // Base64 of the 32-byte device key, cached per RTDB device ID after
+  // the first Firestore fetch so BLE unlock works fully offline.
+
+  static const _kOwnerKeyPrefix = 'ble_owner_key_';
+
+  String? getBleOwnerKey(String rtdbDeviceId) =>
+      _prefs.getString('$_kOwnerKeyPrefix$rtdbDeviceId');
+
+  Future<void> setBleOwnerKey(String rtdbDeviceId, String base64Key) async {
+    await _prefs.setString('$_kOwnerKeyPrefix$rtdbDeviceId', base64Key);
   }
 
   // ── Notification Preferences ─────────────────────────────────────

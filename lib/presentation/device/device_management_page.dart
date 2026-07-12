@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/ble/ble_owner_auth.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../di/locator.dart';
 import '../../domain/ble/ble_connection_status.dart';
@@ -151,6 +152,16 @@ class _DeviceCard extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
+            if (isConnected)
+              const PopupMenuItem(
+                value: _Action.resetKey,
+                child: ListTile(
+                  leading: Icon(Icons.key_outlined),
+                  title: Text('Reset access key'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
             PopupMenuItem(
               value: _Action.remove,
               child: ListTile(
@@ -206,6 +217,8 @@ class _DeviceCard extends StatelessWidget {
         _showRenameDialog(context);
       case _Action.remove:
         _showRemoveConfirmation(context);
+      case _Action.resetKey:
+        _showResetKeyConfirmation(context);
     }
   }
 
@@ -286,9 +299,48 @@ class _DeviceCard extends StatelessWidget {
       ),
     );
   }
+
+  void _showResetKeyConfirmation(BuildContext context) {
+    final ownerAuth = getIt<BleOwnerAuth>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset access key'),
+        content: Text(
+          'Generate a new BLE access key for "${device.nickname}".\n\n'
+          'Other phones will lose local (Bluetooth) control until they '
+          'reconnect while signed into this account. Use this if a phone '
+          'that had access should no longer control the geyser.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await ownerAuth.rotateKey(device.rtdbDeviceId);
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(ok
+                      ? 'Access key reset.'
+                      : 'Could not reset the key — connect to the device and try again.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const Text('Reset key'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-enum _Action { rename, remove }
+enum _Action { rename, remove, resetKey }
 
 // ── Max-On Safety Timer ──────────────────────────────────────────────
 

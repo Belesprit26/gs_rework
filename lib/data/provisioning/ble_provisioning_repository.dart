@@ -90,18 +90,34 @@ class BleProvisioningRepository {
         'tokenLen=${refreshToken.length})');
   }
 
+  /// Write the 32-byte BLE owner key (0x16). The ESP stores it in NVS
+  /// and gates control/provisioning writes behind an HMAC unlock from
+  /// then on. Silently skipped on firmware without the characteristic.
+  Future<void> writeOwnerKey(Uint8List key) async {
+    try {
+      await _ble.writeCharacteristic(GattUuids.provOwnerKey.str, key);
+      debugPrint('[Prov] Owner key written (${key.length} bytes)');
+    } on StateError {
+      // Pre-owner-lock firmware — provisioning still works, the
+      // device just stays ungated until its firmware is updated.
+      debugPrint('[Prov] Device has no owner-key characteristic — skipped');
+    }
+  }
+
   /// Run the full provisioning sequence.
   ///
   /// 1. Write device nickname
   /// 2. If [wifiSsid] is provided, write WiFi credentials
   /// 3. If [refreshToken] is provided, write Firebase auth data
-  /// 4. Write user binding (triggers provisioning on device)
+  /// 4. If [ownerKey] is provided, write the BLE owner key
+  /// 5. Write user binding (triggers provisioning on device)
   Future<void> provision({
     required String deviceNickname,
     required String firebaseUid,
     String? wifiSsid,
     String? wifiPassword,
     String? refreshToken,
+    Uint8List? ownerKey,
     required String deviceId,
   }) async {
     // 1. Subscribe to status first, so we don't miss notifications.
@@ -123,7 +139,14 @@ class BleProvisioningRepository {
       await writeAuthData(refreshToken: refreshToken, deviceId: deviceId);
     }
 
-    // 5. Write user binding — triggers the sequence.
+    // 5. Write the owner key BEFORE binding: setting the key also
+    //    owner-unlocks this session, so the bind that follows passes
+    //    the firmware's gate even on a re-provision.
+    if (ownerKey != null) {
+      await writeOwnerKey(ownerKey);
+    }
+
+    // 6. Write user binding — triggers the sequence.
     await writeUserBinding(firebaseUid);
   }
 

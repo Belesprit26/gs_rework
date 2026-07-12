@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/widgets.dart';
 
+import 'core/debug/debug_log.dart';
 import 'data/firebase/fcm/push_notification_manager.dart';
 import 'data/sync/sync_orchestrator.dart';
 import 'data/sync/workmanager_config.dart';
@@ -16,6 +18,8 @@ import 'presentation/notifications/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Foundational — the app cannot run without Firebase and DI, so a
+  // failure here is allowed to surface loudly.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -31,24 +35,47 @@ Future<void> main() async {
 
   await setupLocator();
 
-  // Start the telemetry recorder — it listens to BLE status
-  // and automatically records when a device is connected.
-  getIt<TelemetryRecorder>().start();
+  // Non-critical startup — each step is an enhancement (telemetry,
+  // notifications, push, background sync). A failure in any one of
+  // them must not prevent the app from launching; it is logged and
+  // reported to Crashlytics instead.
 
-  // Start the notification service — reads buffered events on
-  // BLE connect and subscribes to real-time event notifications.
-  getIt<NotificationService>().start();
+  // Telemetry recorder — listens to BLE status and automatically
+  // records when a device is connected.
+  await _guardedStart('TelemetryRecorder',
+      () => getIt<TelemetryRecorder>().start());
 
-  // Initialize FCM push notifications — requests permission,
-  // registers the token, and sets up foreground display.
-  await getIt<PushNotificationManager>().initialize();
+  // Notification service — reads buffered events on BLE connect and
+  // subscribes to real-time event notifications.
+  await _guardedStart('NotificationService',
+      () => getIt<NotificationService>().start());
 
-  // Start the sync orchestrator — monitors connectivity for WiFi retries
-  // when a midnight push fails.
-  getIt<SyncOrchestrator>().startMonitoring();
+  // FCM push notifications — requests permission, registers the
+  // token, and sets up foreground display.
+  await _guardedStart('PushNotifications',
+      () => getIt<PushNotificationManager>().initialize());
 
-  // Register the workmanager daily task for midnight sync.
-  await initializeWorkmanager();
+  // Sync orchestrator — monitors connectivity for WiFi retries when a
+  // midnight push fails.
+  await _guardedStart('SyncOrchestrator',
+      () => getIt<SyncOrchestrator>().startMonitoring());
+
+  // Workmanager daily task for midnight sync.
+  await _guardedStart('Workmanager', initializeWorkmanager);
 
   runApp(const App());
+}
+
+/// Run one startup step, containing any error so launch continues.
+Future<void> _guardedStart(String name, FutureOr<void> Function() start) async {
+  try {
+    await start();
+  } catch (e, st) {
+    debugLog('Startup', '$name failed to start: $e');
+    // Non-fatal: the app still launches without this subsystem.
+    unawaited(
+      FirebaseCrashlytics.instance
+          .recordError(e, st, reason: 'startup:$name', fatal: false),
+    );
+  }
 }

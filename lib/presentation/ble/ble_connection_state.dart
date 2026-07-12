@@ -11,6 +11,7 @@ class BleConnectionState extends Equatable {
     this.wifiSsid,
     this.deviceNickname,
     this.isBluetoothOn = false,
+    this.ownerUnlock = OwnerUnlockResult.notRequired,
   });
 
   final BleConnectionStatus connectionStatus;
@@ -31,9 +32,20 @@ class BleConnectionState extends Equatable {
   /// Whether the phone's Bluetooth adapter is currently on.
   final bool isBluetoothOn;
 
+  /// Result of the BLE owner-lock unlock on the current connection.
+  final OwnerUnlockResult ownerUnlock;
+
   // ── Derived helpers ───────────────────────────────────────────────
 
   bool get isConnected => connectionStatus == BleConnectionStatus.ready;
+
+  /// True when connected but this phone is NOT authorized to control
+  /// the device over BLE (belongs to another account, or its key was
+  /// rotated away). Control writes will be rejected by the firmware.
+  bool get isOwnerLocked =>
+      isConnected &&
+      (ownerUnlock == OwnerUnlockResult.locked ||
+          ownerUnlock == OwnerUnlockResult.noKey);
   bool get isScanning => connectionStatus == BleConnectionStatus.scanning;
   bool get isPaired => pairedDeviceId != null;
 
@@ -80,6 +92,7 @@ class BleConnectionState extends Equatable {
     Object? wifiSsid = _sentinel,
     Object? deviceNickname = _sentinel,
     bool? isBluetoothOn,
+    OwnerUnlockResult? ownerUnlock,
   }) {
     return BleConnectionState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -101,6 +114,7 @@ class BleConnectionState extends Equatable {
           ? this.deviceNickname
           : deviceNickname as String?,
       isBluetoothOn: isBluetoothOn ?? this.isBluetoothOn,
+      ownerUnlock: ownerUnlock ?? this.ownerUnlock,
     );
   }
 
@@ -115,5 +129,6 @@ class BleConnectionState extends Equatable {
         wifiSsid,
         deviceNickname,
         isBluetoothOn,
+        ownerUnlock,
       ];
 }

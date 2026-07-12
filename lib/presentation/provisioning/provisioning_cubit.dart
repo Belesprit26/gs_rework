@@ -8,7 +8,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
 import '../../core/ble/gatt_uuids.dart';
+import '../../core/ble/owner_auth_codec.dart';
 import '../../core/utils/device_id_generator.dart';
+import '../../data/ble/ble_owner_auth.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../data/provisioning/ble_provisioning_repository.dart';
 import '../../domain/auth/repositories/auth_repository.dart';
@@ -32,11 +34,13 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
     required BleRepository bleRepository,
     required PrefsManager prefsManager,
     required DeviceRegistryCubit deviceRegistry,
+    required BleOwnerAuth ownerAuth,
   })  : _prov = provisioningRepository,
         _auth = authRepository,
         _ble = bleRepository,
         _prefs = prefsManager,
         _registry = deviceRegistry,
+        _ownerAuth = ownerAuth,
         super(const ProvisioningState());
 
   final BleProvisioningRepository _prov;
@@ -44,6 +48,7 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
   final BleRepository _ble;
   final PrefsManager _prefs;
   final DeviceRegistryCubit _registry;
+  final BleOwnerAuth _ownerAuth;
   StreamSubscription<ProvisioningStatus>? _statusSub;
   Timer? _timeout;
 
@@ -227,12 +232,26 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
         debugPrint('[Prov] WiFi not enabled — skipping Firebase auth');
       }
 
+      // The device ID is derived from the BLE identifier. Without it
+      // we cannot assign a unique RTDB identity — abort rather than
+      // fall back to a shared ID that would collide across devices.
       final bleMac = _ble.connectedDeviceId;
-      final deviceId = bleMac != null ? deriveDeviceId(bleMac) : 'g1';
       if (bleMac == null) {
-        debugPrint('[Prov] WARNING: connectedDeviceId is null — '
-            'falling back to device ID "g1"');
+        _timeout?.cancel();
+        emit(state.copyWith(
+          step: ProvisioningStep.result,
+          deviceStatus: ProvisioningStatus.error,
+          errorMessage:
+              'Lost connection to the device — reconnect and try again',
+        ));
+        return;
       }
+      final deviceId = deriveDeviceId(bleMac);
+
+      // BLE owner-lock: a fresh 32-byte key per provisioning. The
+      // device stores it in NVS; every phone signed into this account
+      // retrieves it from Firestore to unlock BLE control.
+      final ownerKey = generateOwnerKey();
 
       await _prov.provision(
         deviceNickname: state.deviceNickname,
@@ -241,24 +260,33 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
         wifiSsid: sendWifi ? state.ssid : null,
         wifiPassword: sendWifi ? state.wifiPassword : null,
         refreshToken: refreshToken,
+        ownerKey: ownerKey,
       );
 
-      if (bleMac != null) {
-        await _prefs.setRtdbDeviceId(bleMac, deviceId);
-        final nick = state.deviceNickname.isNotEmpty
-            ? state.deviceNickname
-            : 'My Geyser';
-        await _prefs.setDeviceNickname(deviceId, nick);
+      // Persist the key (prefs + account Firestore scope) right after
+      // it reached the device — even if WiFi provisioning fails later,
+      // both sides now hold the same key, so retries stay unlocked.
+      await _ownerAuth.storeKey(rtdbDeviceId: deviceId, key: ownerKey);
 
-        _registry.addDevice(DeviceInfo(
-          rtdbDeviceId: deviceId,
-          bleMac: bleMac,
-          nickname: nick,
-        ));
+      await _prefs.setRtdbDeviceId(bleMac, deviceId);
+      final nick = state.deviceNickname.isNotEmpty
+          ? state.deviceNickname
+          : 'My Geyser';
+      await _prefs.setDeviceNickname(deviceId, nick);
 
-        final uid = state.firebaseUid;
-        if (uid != null) {
-          FirebaseFirestore.instance.doc('users/$uid').set({
+      _registry.addDevice(DeviceInfo(
+        rtdbDeviceId: deviceId,
+        bleMac: bleMac,
+        nickname: nick,
+      ));
+
+      // Best-effort registry write — provisioning has already
+      // succeeded on the device, so a Firestore hiccup is logged
+      // rather than surfaced as a provisioning failure.
+      final uid = state.firebaseUid;
+      if (uid != null) {
+        try {
+          await FirebaseFirestore.instance.doc('users/$uid').set({
             'devices': {
               deviceId: {
                 'pairedAt': FieldValue.serverTimestamp(),
@@ -268,6 +296,8 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
             },
             'hasDevice': true,
           }, SetOptions(merge: true));
+        } catch (e) {
+          debugPrint('[Prov] Firestore device registry write failed: $e');
         }
       }
     } catch (e) {

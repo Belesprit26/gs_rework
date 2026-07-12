@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_it/get_it.dart';
 
+import '../data/ble/ble_owner_auth.dart';
 import '../data/firebase/config/geyser_config_repository.dart';
 import '../data/local/prefs_manager.dart';
 import '../data/provisioning/ble_provisioning_repository.dart';
@@ -31,6 +32,7 @@ void registerPresentation(GetIt getIt) {
       bleRepository: getIt<BleRepository>(),
       prefsManager: getIt<PrefsManager>(),
       deviceRegistry: getIt<DeviceRegistryCubit>(),
+      ownerAuth: getIt<BleOwnerAuth>(),
     ),
   );
 
@@ -59,6 +61,7 @@ void registerPresentation(GetIt getIt) {
       bleRepository: getIt<BleRepository>(),
       prefsManager: getIt<PrefsManager>(),
       deviceRegistry: getIt<DeviceRegistryCubit>(),
+      ownerAuth: getIt<BleOwnerAuth>(),
     ),
   );
 
