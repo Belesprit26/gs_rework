@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+import 'neu/neu.dart';
+
 /// A circular temperature gauge that shows the current reading
 /// inside a gradient ring.
 ///
@@ -43,26 +46,33 @@ class TemperatureDisplay extends StatelessWidget {
 
     return GestureDetector(
       onTap: _isSensorOffline ? onSensorOfflineTap : onTap,
-      child: SizedBox(
+      child: RepaintBoundary(
+        child: SizedBox(
         width: size,
         height: size,
         child: CustomPaint(
           painter: _RingPainter(
             temperature: _isSensorOffline ? 0 : temperature,
-            ringWidth: 6,
+            grooveWidth: 12,
+            arcWidth: 5,
           ),
           child: Center(
             child: Container(
               width: innerSize,
               height: innerSize,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: theme.colorScheme.surfaceContainerLowest,
+                color: AppColors.neuBase,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: AppColors.neuShadow,
+                    offset: Offset(6, 6),
                     blurRadius: 12,
-                    spreadRadius: 2,
+                  ),
+                  BoxShadow(
+                    color: AppColors.neuHighlight,
+                    offset: Offset(-6, -6),
+                    blurRadius: 12,
                   ),
                 ],
               ),
@@ -99,6 +109,7 @@ class TemperatureDisplay extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -142,17 +153,23 @@ class _SensorOfflineContent extends StatelessWidget {
   }
 }
 
-/// Paints a gradient arc ring around the temperature circle.
+/// Paints the temperature ring as a debossed *groove* with the value arc
+/// riding inside it.
 ///
-/// The arc sweep is proportional to [temperature] / 75 (max expected temp).
+/// The arc geometry is unchanged from the original flat ring — same start
+/// angle, sweep, gradient and max-temp — so only the surface language
+/// (a carved channel) changes. [grooveWidth] is the channel; [arcWidth]
+/// is the coloured arc sitting in it.
 class _RingPainter extends CustomPainter {
   _RingPainter({
     required this.temperature,
-    this.ringWidth = 6,
+    this.grooveWidth = 10,
+    this.arcWidth = 5,
   });
 
   final double temperature;
-  final double ringWidth;
+  final double grooveWidth;
+  final double arcWidth;
 
   static const double _maxTemp = 70;
   static const double _startAngle = 2.35; // ~135°
@@ -160,23 +177,44 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(
-      ringWidth / 2,
-      ringWidth / 2,
-      size.width - ringWidth,
-      size.height - ringWidth,
+    final center = size.center(Offset.zero);
+    // Centre-line radius, inset so the groove wall stays inside the box.
+    final radius = (size.shortestSide - grooveWidth) / 2 - 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final half = grooveWidth / 2;
+
+    // Band region following the sweep (the channel to carve).
+    final band = Path()
+      ..addArc(
+        Rect.fromCircle(center: center, radius: radius + half),
+        _startAngle,
+        _fullSweep,
+      )
+      ..arcTo(
+        Rect.fromCircle(center: center, radius: radius - half),
+        _startAngle + _fullSweep,
+        -_fullSweep,
+        false,
+      )
+      ..close();
+
+    // Carve the groove: dark wall top-left, light floor bottom-right.
+    drawInnerShadow(
+      canvas,
+      band,
+      color: AppColors.neuShadow,
+      offset: const Offset(2, 2),
+      blur: 3,
+    );
+    drawInnerShadow(
+      canvas,
+      band,
+      color: AppColors.neuHighlight,
+      offset: const Offset(-2, -2),
+      blur: 3,
     );
 
-    // Track background
-    final trackPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = ringWidth
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.grey.shade200;
-
-    canvas.drawArc(rect, _startAngle, _fullSweep, false, trackPaint);
-
-    // Value arc
+    // Value arc — identical gradient/geometry, sitting inside the groove.
     final fraction = (temperature.clamp(0, _maxTemp) / _maxTemp);
     final sweep = _fullSweep * fraction;
 
@@ -195,7 +233,7 @@ class _RingPainter extends CustomPainter {
 
     final valuePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = ringWidth
+      ..strokeWidth = arcWidth
       ..strokeCap = StrokeCap.round
       ..shader = gradient.createShader(rect);
 
@@ -204,5 +242,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RingPainter oldDelegate) =>
-      oldDelegate.temperature != temperature;
+      oldDelegate.temperature != temperature ||
+      oldDelegate.grooveWidth != grooveWidth ||
+      oldDelegate.arcWidth != arcWidth;
 }

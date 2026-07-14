@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'neu/neu.dart';
 import 'temperature_display.dart';
 
 /// The main dashboard "hero" card that shows a single geyser's
@@ -42,29 +43,12 @@ class GeyserFocalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cardColor = theme.colorScheme.surfaceContainerLowest;
-
-    return Container(
-      width: double.infinity,
+    return NeuPanel(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isOn
-              ? _accentForTemp(temperature).withValues(alpha: 0.35)
-              : Colors.grey.shade300,
-        ),
-        boxShadow: [
-          if (isOn)
-            BoxShadow(
-              color: _accentForTemp(temperature).withValues(alpha: 0.12),
-              blurRadius: 16,
-              spreadRadius: 2,
-            ),
-        ],
-      ),
+      borderRadius: 24,
+      glowColor: isOn
+          ? _accentForTemp(temperature).withValues(alpha: 0.16)
+          : null,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -144,43 +128,47 @@ class _PowerToggle extends StatelessWidget {
   final bool isBusy;
   final VoidCallback onTap;
 
+  static const _accent = Color(0xFFFFA62B);
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: isBusy ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
+      child: SizedBox(
         width: 64,
         height: 34,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(17),
-          color: isOn ? const Color(0xFFFFA62B).withValues(alpha: 0.5) : Colors.grey.shade300,
-          border: Border.all(color: Colors.white, width: 2),
-        ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
+        child: Stack(
+          children: [
+            // Inset groove track (tints amber when on).
+            Positioned.fill(
+              child: CustomPaint(
+                painter: NeuTrackPainter(isOn: isOn, accent: _accent),
               ),
-              child: isBusy
-                  ? const Padding(
-                      padding: EdgeInsets.all(5),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : null,
             ),
-          ),
+            // Raised thumb slides in the groove.
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: NeuRaisedCircle(
+                  size: 26,
+                  distance: 2,
+                  blur: 4,
+                  child: isBusy
+                      ? const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
+

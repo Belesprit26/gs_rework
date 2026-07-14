@@ -20,9 +20,12 @@ import '../geyser/geyser_control_cubit.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
 import '../shared/widgets/geyser_focal_card.dart';
+import '../shared/widgets/neu/neu.dart';
+import '../shared/widgets/neu/neu_slider.dart';
 import '../shared/widgets/stat_tile.dart';
 import '../stats/device_stats_cubit.dart';
 import '../stats/stats_card.dart';
+import '../theme/app_colors.dart';
 import '../../domain/geyser/timer_presets.dart';
 
 /// The main app shell after sign-in.
@@ -295,6 +298,13 @@ class _SingleDeviceHome extends StatelessWidget {
             const _ModeBanner(),
             const SizedBox(height: 12),
 
+            // Savings summary + quick-glance tiles. Additive: sits
+            // between the status banner and the Geyser Stats section.
+            const _SavingsCard(),
+            const SizedBox(height: 14),
+            _AtAGlanceGrid(snapshot: snap),
+            const SizedBox(height: 18),
+
             Text(
               'Geyser Stats',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -361,6 +371,11 @@ class _SingleDeviceHome extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           return AlertDialog(
+            backgroundColor: AppColors.neuBase,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
             title: const Text('Timer Settings'),
             content: SizedBox(
               width: double.maxFinite,
@@ -438,16 +453,17 @@ class _SingleDeviceHome extends StatelessWidget {
               ),
             ),
             actions: [
-              TextButton(
+              NeuButton(
+                label: 'Cancel',
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
               ),
-              FilledButton(
+              NeuButton(
+                label: 'Save',
+                primary: true,
                 onPressed: () {
                   cubit.setTimers(timers);
                   Navigator.pop(ctx);
                 },
-                child: const Text('Save'),
               ),
             ],
           );
@@ -503,6 +519,11 @@ class _SingleDeviceHome extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.neuBase,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           title: Row(
             children: [
               const Expanded(child: Text('Temperature Limits')),
@@ -523,12 +544,15 @@ class _SingleDeviceHome extends StatelessWidget {
                   Text('$min°C'),
                 ],
               ),
-              Slider(
-                min: 5,
-                max: 50,
-                divisions: 45,
-                value: min.toDouble().clamp(5, 50),
-                onChanged: (v) => setDialogState(() => min = v.round()),
+              SliderTheme(
+                data: neuSliderTheme(ctx, accent: AppColors.primary),
+                child: Slider(
+                  min: 5,
+                  max: 50,
+                  divisions: 45,
+                  value: min.toDouble().clamp(5, 50),
+                  onChanged: (v) => setDialogState(() => min = v.round()),
+                ),
               ),
               const SizedBox(height: 8),
 
@@ -539,12 +563,15 @@ class _SingleDeviceHome extends StatelessWidget {
                   Text('$max°C'),
                 ],
               ),
-              Slider(
-                min: 51,
-                max: 65,
-                divisions: 14,
-                value: max.toDouble().clamp(51, 65),
-                onChanged: (v) => setDialogState(() => max = v.round()),
+              SliderTheme(
+                data: neuSliderTheme(ctx, accent: AppColors.rampOrange),
+                child: Slider(
+                  min: 51,
+                  max: 65,
+                  divisions: 14,
+                  value: max.toDouble().clamp(51, 65),
+                  onChanged: (v) => setDialogState(() => max = v.round()),
+                ),
               ),
               const Divider(height: 24),
 
@@ -567,7 +594,7 @@ class _SingleDeviceHome extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Switch(
+                  NeuSwitch(
                     value: autoReheat,
                     onChanged: (v) =>
                         setDialogState(() => autoReheat = v),
@@ -577,11 +604,13 @@ class _SingleDeviceHome extends StatelessWidget {
             ],
           ),
           actions: [
-            TextButton(
+            NeuButton(
+              label: 'Cancel',
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
             ),
-            FilledButton(
+            NeuButton(
+              label: 'Save',
+              primary: true,
               onPressed: () {
                 cubit.setTempLimits(
                   min: min,
@@ -590,7 +619,6 @@ class _SingleDeviceHome extends StatelessWidget {
                 );
                 Navigator.pop(ctx);
               },
-              child: const Text('Save'),
             ),
           ],
         ),
@@ -726,21 +754,16 @@ class _PresetTimerRow extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          // Time label (non-editable for presets).
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
+          // Time label (non-editable for presets) — debossed chip.
+          NeuInset(
             child: Text(
               timer.timeFormatted,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: timer.enabled ? null : Colors.grey,
+                color: timer.enabled ? AppColors.ink : AppColors.muted,
               ),
             ),
           ),
@@ -748,11 +771,11 @@ class _PresetTimerRow extends StatelessWidget {
           Text(
             _offPeakLabel(timer.hour),
             style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.grey.shade600,
+              color: AppColors.inkSecondary,
             ),
           ),
           const Spacer(),
-          Switch(
+          NeuSwitch(
             value: timer.enabled,
             onChanged: onToggle,
           ),
@@ -1431,50 +1454,52 @@ class _CustomTimerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final timeChild = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          timer.timeFormatted,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: timer.enabled ? AppColors.ink : AppColors.muted,
+          ),
+        ),
+        if (timer.enabled) ...[
+          const SizedBox(width: 4),
+          const Icon(Icons.edit, size: 14, color: AppColors.inkSecondary),
+        ],
+      ],
+    );
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          // Tappable time button.
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
+          // Tappable time button — raised when enabled, debossed when off.
+          GestureDetector(
             onTap: timer.enabled ? onPickTime : null,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: timer.enabled
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    timer.timeFormatted,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: timer.enabled ? null : Colors.grey,
+            child: timer.enabled
+                ? Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.neuBase,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: neuRaisedShadows(distance: 3, blur: 6),
                     ),
-                  ),
-                  if (timer.enabled) ...[
-                    const SizedBox(width: 4),
-                    Icon(Icons.edit, size: 14, color: Colors.grey.shade600),
-                  ],
-                ],
-              ),
-            ),
+                    child: timeChild,
+                  )
+                : NeuInset(child: timeChild),
           ),
           const SizedBox(width: 8),
           Text(
             'Custom',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.grey.shade600,
+              color: AppColors.inkSecondary,
             ),
           ),
           const Spacer(),
-          Switch(
+          NeuSwitch(
             value: timer.enabled,
             onChanged: onToggle,
           ),
@@ -1513,6 +1538,418 @@ class _OwnerLockedBanner extends StatelessWidget {
                     color: cs.onErrorContainer,
                   ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Savings summary card ──────────────────────────────────────────────
+//
+// "What you've saved" — a Rands-first view of DeviceStatsCubit. The Day
+// tab is backed by real data (runtime × element kW × rate, compared to
+// the SA baseline for the tank size, all from DeviceStatsState). Week and
+// Month are placeholders until a stats-range fetch is added — kept as a
+// separate increment rather than bundled here.
+class _SavingsCard extends StatefulWidget {
+  const _SavingsCard();
+
+  @override
+  State<_SavingsCard> createState() => _SavingsCardState();
+}
+
+class _SavingsCardState extends State<_SavingsCard> {
+  int _period = 0; // 0 = Day, 1 = Week, 2 = Month
+
+  // Brand accent from the logo arc: cool = the (efficient) amount you
+  // actually spent, warm = the "usual" bill you avoided.
+  static const _cool = AppColors.rampTeal;
+  static const _warm = AppColors.rampOrange;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                "What you've saved",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            _PeriodSegmented(
+              index: _period,
+              onChanged: (i) => setState(() => _period = i),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child:
+                _period == 0 ? _buildDay(context) : _buildComingSoon(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildComingSoon(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = _period == 1 ? 'Weekly' : 'Monthly';
+    return SizedBox(
+      height: 96,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.insights_outlined, color: AppColors.muted),
+            const SizedBox(height: 8),
+            Text(
+              '$label totals are coming soon',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.inkSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Showing today for now',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDay(BuildContext context) {
+    final theme = Theme.of(context);
+    return BlocBuilder<DeviceStatsCubit, DeviceStatsState>(
+      builder: (context, state) {
+        if (!state.hasData) {
+          return SizedBox(
+            height: 96,
+            child: Center(
+              child: Text(
+                'No usage yet today — your savings will\n'
+                'show here once the geyser runs.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.muted,
+                ),
+              ),
+            ),
+          );
+        }
+
+        final rate = state.config.costPerKwh;
+        final spent = state.actualCost;
+        final usual = state.baselineKwh * rate;
+        final saved = state.savedCost;
+        final spentFrac = usual > 0 ? (spent / usual).clamp(0.0, 1.0) : 1.0;
+        final savedNow = saved > 0.005;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              savedNow
+                  ? "Today you've saved"
+                  : 'About the same as usual today',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.inkSecondary,
+              ),
+            ),
+            if (savedNow) ...[
+              const SizedBox(height: 4),
+              Text(
+                'R${saved.toStringAsFixed(2)}',
+                style: theme.textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.save,
+                  letterSpacing: -1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'by heating smart instead of leaving it on',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            // Money thermometer: the slice of the "usual" bill you used.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: SizedBox(
+                height: 14,
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: (spentFrac * 1000).round().clamp(1, 1000),
+                      child: Container(color: _cool),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      flex: ((1 - spentFrac) * 1000).round().clamp(1, 1000),
+                      child: Container(color: _warm),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 9),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _legend(
+                    context, 'R${spent.toStringAsFixed(0)} you spent', _cool),
+                _legend(context, 'R${usual.toStringAsFixed(0)} usual', _warm),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _legend(BuildContext context, String text, Color color) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+    );
+  }
+}
+
+/// Compact Day / Week / Month segmented control.
+class _PeriodSegmented extends StatelessWidget {
+  const _PeriodSegmented({required this.index, required this.onChanged});
+
+  final int index;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['Day', 'Week', 'Month'];
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(labels.length, (i) {
+          final active = i == index;
+          return GestureDetector(
+            onTap: () => onChanged(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: active ? AppColors.surface : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: active
+                    ? const [
+                        BoxShadow(
+                          color: Color(0x1F000000),
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Text(
+                labels[i],
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: active ? AppColors.ink : AppColors.inkSecondary,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+// ── At a glance grid ──────────────────────────────────────────────────
+//
+// Four quick-status tiles. Next timer + auto-reheat come from the geyser
+// snapshot; heated-today + cycles from DeviceStatsCubit.
+class _AtAGlanceGrid extends StatelessWidget {
+  const _AtAGlanceGrid({required this.snapshot});
+
+  final GeyserSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final next = _nextTimer(snapshot.timers);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'At a glance',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        BlocBuilder<DeviceStatsCubit, DeviceStatsState>(
+          builder: (context, stats) {
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _GlanceTile(
+                        label: 'Next timer',
+                        value: next?.$1 ?? 'None set',
+                        hint: next?.$2,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _GlanceTile(
+                        label: 'Auto-reheat',
+                        value: snapshot.autoReheat ? 'On' : 'Off',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _GlanceTile(
+                        label: 'Heated today',
+                        value: _fmtRuntime(stats.stats.runtimeSeconds),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _GlanceTile(
+                        label: 'Cycles',
+                        value: '${stats.stats.cycleCount}',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// (timeLabel, hint) for the soonest enabled timer, wrapping to
+  /// tomorrow; null when nothing is scheduled.
+  (String, String?)? _nextTimer(List<dynamic> timers) {
+    final now = DateTime.now();
+    final nowMin = now.hour * 60 + now.minute;
+    int? bestDelta;
+    dynamic best;
+    for (final t in timers) {
+      if (t.enabled != true) continue;
+      final mins = (t.hour as int) * 60 + (t.minute as int);
+      var delta = mins - nowMin;
+      if (delta < 0) delta += 24 * 60;
+      if (bestDelta == null || delta < bestDelta) {
+        bestDelta = delta;
+        best = t;
+      }
+    }
+    if (best == null) return null;
+    final h = (best.hour as int).toString().padLeft(2, '0');
+    final m = (best.minute as int).toString().padLeft(2, '0');
+    final hint = (best.isPreset == true) ? 'off-peak' : 'custom';
+    return ('$h:$m', hint);
+  }
+
+  static String _fmtRuntime(int seconds) {
+    if (seconds <= 0) return '0m';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    if (h == 0) return '${m}m';
+    return '${h}h ${m}m';
+  }
+}
+
+class _GlanceTile extends StatelessWidget {
+  const _GlanceTile({required this.label, required this.value, this.hint});
+
+  final String label;
+  final String value;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.hairline),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w700,
+              fontSize: 10.5,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (hint != null) ...[
+                const SizedBox(width: 5),
+                Text(
+                  hint!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),

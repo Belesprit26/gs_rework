@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../theme/app_colors.dart';
 import 'device_stats_cubit.dart';
 
 class StatsCard extends StatelessWidget {
@@ -15,11 +16,6 @@ class StatsCard extends StatelessWidget {
         final theme = Theme.of(context);
 
         return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -57,11 +53,11 @@ class StatsCard extends StatelessWidget {
                   const Divider(height: 24),
                   _StatRow(
                     icon: Icons.eco_outlined,
-                    iconColor: Colors.green,
+                    iconColor: AppColors.save,
                     label: 'Saved vs uncontrolled',
                     value: '${state.savedKwh.toStringAsFixed(1)} kWh '
                         '(${state.savedPercent.toStringAsFixed(0)}%)',
-                    valueColor: Colors.green.shade700,
+                    valueColor: AppColors.save,
                   ),
                   const SizedBox(height: 4),
                   Padding(
@@ -69,7 +65,7 @@ class StatsCard extends StatelessWidget {
                     child: Text(
                       'R${state.savedCost.toStringAsFixed(2)} saved',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.green.shade700,
+                        color: AppColors.save,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -84,7 +80,7 @@ class StatsCard extends StatelessWidget {
                       '(~${state.baselineKwh.toStringAsFixed(0)} kWh/day). '
                       'Adjust your setup in Settings.',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
+                        color: AppColors.muted,
                         fontSize: 11,
                       ),
                     ),
@@ -95,13 +91,13 @@ class StatsCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(Icons.power_settings_new,
-                          size: 16, color: Colors.grey.shade400),
+                      const Icon(Icons.power_settings_new,
+                          size: 16, color: AppColors.muted),
                       const SizedBox(width: 8),
                       Text(
                         'Device booted ${_timeAgo(state.lastBoot!)}',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.grey.shade500,
+                          color: AppColors.muted,
                           fontSize: 12,
                         ),
                       ),
@@ -157,13 +153,13 @@ class _StatRow extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon, size: 18, color: iconColor ?? Colors.grey.shade600),
+        Icon(icon, size: 18, color: iconColor ?? AppColors.inkSecondary),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             label,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade700,
+              color: AppColors.inkSecondary,
             ),
           ),
         ),
@@ -179,7 +175,7 @@ class _StatRow extends StatelessWidget {
           Text(
             trailing!,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.grey.shade500,
+              color: AppColors.muted,
               fontSize: 11,
             ),
           ),
