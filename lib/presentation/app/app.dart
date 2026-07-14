@@ -8,6 +8,7 @@ import '../ble/ble_connection_cubit.dart';
 import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../stats/device_stats_cubit.dart';
+import '../theme/app_theme.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -31,6 +32,7 @@ class App extends StatelessWidget {
       ],
       child: MaterialApp(
         navigatorKey: PushNotificationManager.navigatorKey,
+        theme: AppTheme.light,
         home: const AuthGateView(),
       ),
     );

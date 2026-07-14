@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 /// A compact, reusable information row with a leading coloured icon
 /// and a text label. Used for geyser stats, settings summaries, etc.
 ///
@@ -41,7 +43,7 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bgColor = iconBackgroundColor ?? Colors.grey.shade700;
+    final bgColor = iconBackgroundColor ?? AppColors.inkSecondary;
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -49,7 +51,8 @@ class StatTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade200),
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.hairline),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -83,7 +86,7 @@ class StatTile extends StatelessWidget {
                     Text(
                       subtitle!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey,
+                        color: AppColors.muted,
                       ),
                     ),
                   ],
