@@ -1591,12 +1591,9 @@ class _SavingsCardState extends State<_SavingsCard> {
           ],
         ),
         const SizedBox(height: 10),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child:
-                _period == 0 ? _buildDay(context) : _buildComingSoon(context),
-          ),
+        SoftCard(
+          padding: const EdgeInsets.all(16),
+          child: _period == 0 ? _buildDay(context) : _buildComingSoon(context),
         ),
       ],
     );
@@ -1906,13 +1903,9 @@ class _GlanceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return SoftCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.hairline),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      borderRadius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

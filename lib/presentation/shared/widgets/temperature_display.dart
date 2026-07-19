@@ -62,7 +62,7 @@ class TemperatureDisplay extends StatelessWidget {
               height: innerSize,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.neuBase,
+                color: AppColors.surface,
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.neuShadow,
