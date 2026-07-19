@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
 import 'neu/neu.dart';
 import 'temperature_display.dart';
 
@@ -46,6 +47,7 @@ class GeyserFocalCard extends StatelessWidget {
     return NeuPanel(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       borderRadius: 24,
+      color: AppColors.surface,
       glowColor: isOn
           ? _accentForTemp(temperature).withValues(alpha: 0.16)
           : null,
@@ -142,7 +144,11 @@ class _PowerToggle extends StatelessWidget {
             // Inset groove track (tints amber when on).
             Positioned.fill(
               child: CustomPaint(
-                painter: NeuTrackPainter(isOn: isOn, accent: _accent),
+                painter: NeuTrackPainter(
+                  isOn: isOn,
+                  accent: _accent,
+                  base: AppColors.surface,
+                ),
               ),
             ),
             // Raised thumb slides in the groove.
@@ -156,6 +162,7 @@ class _PowerToggle extends StatelessWidget {
                   size: 26,
                   distance: 2,
                   blur: 4,
+                  color: AppColors.surface,
                   child: isBusy
                       ? const Padding(
                           padding: EdgeInsets.all(6),

@@ -111,10 +111,18 @@ class NeuPanel extends StatelessWidget {
 /// Shared by the power toggle and [NeuSwitch]. Tints toward [accent] when
 /// [isOn]; otherwise the plain base tone.
 class NeuTrackPainter extends CustomPainter {
-  NeuTrackPainter({required this.isOn, required this.accent});
+  NeuTrackPainter({
+    required this.isOn,
+    required this.accent,
+    this.base = AppColors.neuBase,
+  });
 
   final bool isOn;
   final Color accent;
+
+  /// Surface tone the groove floor is carved into (white for the focal
+  /// card's toggle, [AppColors.neuBase] for the dialog switches).
+  final Color base;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -124,7 +132,7 @@ class NeuTrackPainter extends CustomPainter {
     );
 
     // Groove floor + carved walls first (on the plain base tone).
-    canvas.drawRRect(rrect, Paint()..color = AppColors.neuBase);
+    canvas.drawRRect(rrect, Paint()..color = base);
     final path = Path()..addRRect(rrect);
     drawInnerShadow(
       canvas,
@@ -158,7 +166,9 @@ class NeuTrackPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant NeuTrackPainter oldDelegate) =>
-      oldDelegate.isOn != isOn || oldDelegate.accent != accent;
+      oldDelegate.isOn != isOn ||
+      oldDelegate.accent != accent ||
+      oldDelegate.base != base;
 }
 
 /// A neomorphic on/off switch: inset groove track + raised sliding thumb.
@@ -321,6 +331,42 @@ class _NeuInsetPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _NeuInsetPainter oldDelegate) =>
       oldDelegate.borderRadius != borderRadius || oldDelegate.tint != tint;
+}
+
+/// A smooth, borderless white card with a pillowy neomorphic lift — a
+/// bright highlight (top-left) + soft shadow (bottom-right) around a white
+/// surface. The "Direction B" treatment for the savings card and glance
+/// tiles. Keeps the surface white; only the depth cue changes.
+class SoftCard extends StatelessWidget {
+  const SoftCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.borderRadius = 18,
+    this.color,
+    this.distance = 6,
+    this.blur = 16,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final double borderRadius;
+  final Color? color;
+  final double distance;
+  final double blur;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color ?? AppColors.surface,
+        borderRadius: BorderRadius.circular(borderRadius),
+        boxShadow: neuRaisedShadows(distance: distance, blur: blur),
+      ),
+      child: child,
+    );
+  }
 }
 
 /// A raised circle. Used for the temperature puck and toggle thumb.
