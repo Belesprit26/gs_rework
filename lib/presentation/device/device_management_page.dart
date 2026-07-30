@@ -370,7 +370,7 @@ class _MaxOnTimerSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Safety Settings',
+            Text('Energy & Runtime',
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: Colors.grey.shade700,
@@ -410,21 +410,19 @@ class _MaxOnTimerSection extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       current == 0
-                          ? 'No limit — if the temperature sensor is '
-                              'offline, the relay could stay on indefinitely.'
-                          : 'If the temperature sensor goes offline, '
-                              'the relay will automatically turn off after '
-                              '$label of continuous heating.',
+                          ? 'Off — the geyser stays powered until a timer, '
+                              'your temperature limit, or you switch it off.'
+                          : 'Caps a single heating stretch at $label. '
+                              'Useful if the geyser is left on by accident.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade600,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'When the sensor is working, the thermostat '
-                      'handles this automatically — this timer only '
-                      'activates as a safety net when the sensor is '
-                      'not detected.',
+                      'This is an energy guard, not a temperature control — '
+                      'your geyser\'s built-in thermostat regulates the '
+                      'water either way.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade500,
                       ),
@@ -448,10 +446,9 @@ class _MaxOnTimerSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Recommended: 4 hours. Protects against a '
-                      'sensor cable disconnect while the geyser is '
-                      'heating. Your geyser\'s built-in thermostat '
-                      'is unaffected.',
+                      'Recommended: 4 hours. Caps how long the geyser can '
+                      'draw power in one stretch. Your geyser\'s built-in '
+                      'thermostat is unaffected.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade500,
                         fontStyle: FontStyle.italic,

@@ -26,8 +26,8 @@ enum NotificationType {
   /// Temperature sensor recovered after a failure.
   sensorRecover(0x05, 'Sensor Recovered'),
 
-  /// Relay forced OFF after exceeding max continuous run time.
-  maxOnTimeout(0x06, 'Max-On Safety Off'),
+  /// Power switched off after the max continuous run time was reached.
+  maxOnTimeout(0x06, 'Max Run Time Reached'),
 
   /// Unrecognised event code from firmware.
   unknown(0x00, 'Unknown Event');
@@ -109,8 +109,10 @@ class DeviceNotification extends Equatable {
         return 'Temperature sensor is not responding — geyser runs normally';
       case NotificationType.sensorRecover:
         return 'Temperature sensor is back online ($temperature°C)';
+      // Must stay in step with the FCM copy in functions/index.js —
+      // the same event arrives by either path.
       case NotificationType.maxOnTimeout:
-        return 'Geyser turned off — sensor offline, max run time exceeded';
+        return 'Geyser turned off — maximum run time reached';
       case NotificationType.unknown:
         return 'Unknown event at $temperature°C';
     }

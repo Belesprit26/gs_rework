@@ -4,9 +4,16 @@ Last updated: 2026-03-08
 
 ## 1. Applicable Standards
 
-The GeyserSwitch is a mains-connected household appliance that switches a geyser
-heating element (230 VAC, up to 20 A). The following South African and international
-standards apply:
+The GeyserSwitch is a mains-connected household appliance that switches the mains
+supply to a geyser (230 VAC, up to 20 A), **upstream of and independent of the
+geyser's own mechanical thermostat, which remains the temperature-regulating and
+safety device.** The GeyserSwitch does not connect to the heating element, does not
+replace the geyser's thermostat or temperature/pressure relief valve, and performs
+no safety function that the geyser does not already perform for itself; its
+temperature sensing provides monitoring, scheduling, and an optional supplementary
+cut-off below the geyser's own setpoint.
+
+The following South African and international standards apply:
 
 | Standard | Title | Relevance |
 |----------|-------|-----------|

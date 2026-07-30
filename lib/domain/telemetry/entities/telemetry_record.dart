@@ -28,7 +28,7 @@ class TelemetryRecord extends Equatable {
   /// Water temperature in °C.
   final double temperature;
 
-  /// Whether the geyser element was on.
+  /// Whether the relay was closed (mains supplied to the geyser).
   final bool isOn;
 
   /// Min temp limit at the time of reading.

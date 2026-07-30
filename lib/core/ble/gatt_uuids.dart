@@ -17,7 +17,8 @@ abstract final class GattUuids {
   /// Properties: Read, Notify.
   static final temperature = Guid('47530002-7652-4543-b201-c4b801a6c700');
 
-  /// Geyser element state: 0x00 = off, 0x01 = on.
+  /// Relay state — mains supplied to the geyser: 0x00 = off, 0x01 = on.
+  /// (The element itself cycles under the geyser's own thermostat.)
   /// Properties: Read, Write, Notify.
   static final geyserState = Guid('47530003-7652-4543-b201-c4b801a6c700');
 

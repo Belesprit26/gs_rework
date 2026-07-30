@@ -24,7 +24,7 @@ class GeyserFocalCard extends StatelessWidget {
   /// Display name of the geyser (e.g. "Buti").
   final String name;
 
-  /// Whether the geyser element is currently on.
+  /// Whether the geyser is currently powered (relay closed).
   final bool isOn;
 
   /// Current sensor temperature in °C.  Negative means sensor offline.

@@ -22,6 +22,20 @@ class DeviceStatsState extends Equatable {
   final DateTime? lastBoot;
 
   double get runtimeHours => stats.runtimeSeconds / 3600.0;
+
+  /// KNOWN APPROXIMATION — reads high.
+  ///
+  /// `runtimeSeconds` is accumulated *relay*-ON time (mains supplied to
+  /// the geyser), but this multiplies it by the element's rated kW as if
+  /// the element drew full power throughout. It does not: inside the
+  /// relay-ON window the geyser's own thermostat cycles the element,
+  /// typically well under 100% duty once the tank is up to temperature.
+  ///
+  /// So `actualKwh`/`actualCost` overstate consumption, and `savedKwh`/
+  /// `savedPercent` correspondingly understate the saving — i.e. the
+  /// error is conservative in the customer's favour, never flattering.
+  /// Fixing it properly needs either current sensing (staged, not built)
+  /// or a duty-cycle estimate; treat these figures as indicative.
   double get actualKwh => runtimeHours * config.elementKw;
   double get actualCost => actualKwh * config.costPerKwh;
 

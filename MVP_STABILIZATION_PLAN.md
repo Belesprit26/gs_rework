@@ -6,6 +6,22 @@
 
 ---
 
+## 0. Hardware topology — read this before reasoning about safety
+
+**The relay switches the geyser at the POWER SOURCE (upstream mains). It is not wired to the heating element, and the geyser's own mechanical thermostat is untouched and still fully regulates water temperature.**
+
+Consequences that govern every design decision below:
+
+- **Relay ON = an ordinary geyser**, self-regulating at its factory setpoint. This controller cannot cause runaway heating or a scald.
+- **Relay OFF = the geyser has no power** — i.e. no hot water for the customer. Switching off is a *customer-impacting* action, not a "safe" default.
+- The DS18B20 provides **monitoring, smart scheduling, and one genuine added protective layer**: when it reads above the user's setpoint (capped at `TEMP_MAX_CEIL` 65 °C, below a typical factory setpoint), cutting mains catches a geyser whose own thermostat has stuck closed.
+- **A failed sensor is a loss of visibility, not a hazard.** Degrading toward relay-OFF on sensor failure trades a monitoring fault for a no-hot-water callout — strictly worse. Notify the user; leave the power alone.
+- "Max continuous run" is an **energy / left-on-too-long feature**, not a safety cutoff. `0 = Off` is a legitimate user choice firmware must never override.
+
+The original audit (2026-07-30) assumed element-level switching and recommended failing toward relay-OFF; S3/S4 below were implemented on that assumption and **reverted on 2026-07-30** once the topology was confirmed. Anything that reasons "cut the power to be safe" should be re-checked against this section.
+
+---
+
 ## 1. Verdict & principles
 
 The codebase is structurally sound: the BLE protocol contract is byte-verified on both sides (UUIDs, endianness, clamps, HMAC owner-auth with a shared RFC 4231 test vector), sync is crash-safe by construction, Firebase rules are deny-by-default and uid-scoped, TLS is enforced everywhere, and OTA uses true A/B partitions. What blocks release is a short list of high-impact defects, most with small fixes.
@@ -14,7 +30,7 @@ Every fix in this plan obeys three rules:
 
 1. **Non-breaking protocol.** No change alters a GATT UUID, payload byte layout, status enum, RTDB schema, or NDJSON chunk format. Old app ↔ new firmware and new app ↔ old firmware must keep working during the rollout window.
 2. **Remote-updatable from day one.** Firmware ships only after OTA rollback is proven working (flash a deliberately-crashing image; watch it revert). The app ships with Crashlytics symbol upload and staged rollout so a bad release is caught at 10%, not 100%.
-3. **Fail safe, fail visible.** Where the device must degrade, it degrades toward relay-OFF and toward an event/log a human can see.
+3. **Fail visible, not fail-dark.** Where the device must degrade, it degrades toward an event/log a human can see — *not* toward cutting power. Per §0, relay-OFF means no hot water, so it is never the automatic "safe" choice; the geyser regulates itself when powered.
 
 ---
 
@@ -22,11 +38,11 @@ Every fix in this plan obeys three rules:
 
 ### B1 — Task watchdog does not protect the control loop
 - **Where:** firmware — no `esp_task_wdt_add()` anywhere in `main/`; `CONFIG_ESP_TASK_WDT_PANIC` unset (`sdkconfig:1264`).
-- **Failure:** `temperature_task` is the only task that ever turns the relay OFF (thermostat cutoff `temperature.c:231`, max-on backstop `temperature.c:306-335`). If it hangs in the OneWire/RMT driver, the relay stays ON indefinitely and every software cutoff is dead.
+- **Failure:** `temperature_task` drives the setpoint cutoff and the max continuous run timer, and is the task that keeps temperature/telemetry flowing. If it hangs in the OneWire/RMT driver the unit goes dark — no setpoint cutoff, no supplementary over-temperature protection, no telemetry, and no automatic recovery — while remaining unresponsive to the app and the schedule. Per §0 the geyser itself stays safely regulated by its own thermostat; the loss is control, visibility and energy management.
 - **Fix:**
   1. `sdkconfig.defaults`: add `CONFIG_ESP_TASK_WDT_PANIC=y` (keep 30 s timeout).
   2. Subscribe `temperature_task`, `scheduler_task`, and `button_task` with `esp_task_wdt_add(NULL)` at task start; call `esp_task_wdt_reset()` once per loop iteration.
-  3. Panic → reboot → relay GPIO is low (OFF) through boot until NVS state restore — the safe direction.
+  3. Panic → reboot → the persisted relay state is restored on boot (the GPIO is unavoidably low for the ~1 s of boot itself; per §0 that is a physical consequence, not a "safe default" to aim for). Reset reason is logged and pushed to RTDB (C5) so crash loops are visible.
 - **Non-breaking:** firmware-internal. **Verify:** add a debug-only test hook that blocks the temp task; confirm reboot within 30 s.
 
 ### B2 — Scheduler timer fires once, then never again (single-timer config)
@@ -64,14 +80,14 @@ Every fix in this plan obeys three rules:
 
 ## 3. Major fixes (before launch, or first patch immediately after)
 
-### 3.1 Safety-adjacent (firmware)
+### 3.1 Control-correctness (firmware)
 
 | ID | Issue | Fix |
 |----|-------|-----|
-| S1 | Relay state/GPIO set non-atomically from 5 tasks (`temperature.c`, `scheduler.c`, `button.c`, `gatt_server.c`, `firebase_rtdb.c`); a race can leave GPIO=ON with state=OFF → thermostat cutoff blind | Drive the GPIO inside `device_state_set_relay()` under the existing mutex; plus one reconciliation line in the temp task each 10 s cycle: `relay_set(device_state_get_relay())` — self-healing |
-| S2 | `max_on_minutes` unclamped everywhere (0 = backstop disabled; contrast temp limits, clamped at every path) | Clamp at the same choke point as temp limits (`device_state.c`): range 30–360, reject 0. RTDB `.validate` already range-checks — mirror the same range |
-| S3 | On confirmed sensor failure the relay stays ON up to 4 h (max-on default) | Policy decision: force relay OFF on `EVT_SENSOR_FAIL` (recommended for MVP — cold water is a complaint, scalding is a liability), or a short sensor-fail ceiling (e.g. 30 min) |
-| S4 | Max-on accumulator resets every reboot (RAM-only) — a crash-looping device with relay persisted ON gets a fresh 4 h per boot | If reboot was not clean (`esp_reset_reason() != POWERON/SW`) and relay restores ON, start with a reduced first window |
+| S1 | Relay state/GPIO set non-atomically from 5 tasks (`temperature.c`, `scheduler.c`, `button.c`, `gatt_server.c`, `firebase_rtdb.c`); a race can leave state and GPIO disagreeing, so the UI/cloud report one thing while the geyser does another, and the setpoint cutoff never fires | **Done.** Drive the GPIO inside `device_state_set_relay()` under the existing mutex; plus one reconciliation line in the temp task each 10 s cycle — self-healing. Correctness fix, valid regardless of topology |
+| S2 | `max_on_minutes` unclamped everywhere — a bad write could set a nonsensical value | **Done (revised).** Clamp to ≤ `MAX_ON_CEIL` (1440) at every entry point, mirroring the RTDB rules' 0–1440 range. `0 = Off` is **kept** as a legitimate explicit user choice (the app offers it) — per §0 this is an energy feature, not a safety backstop, so firmware must not override the user |
+| S3 | ~~On confirmed sensor failure the relay stays ON up to 4 h~~ | **REVERTED — was wrong (see §0).** Force-OFF on `EVT_SENSOR_FAIL` was implemented, then removed: with mains-level switching a dead sensor is a monitoring loss, not a hazard, and cutting power turns a cheap sensor fault into a no-hot-water callout. Current behaviour: fire `EVT_SENSOR_FAIL`, push the sentinel, **notify the user**, and leave the relay untouched. The sensor-fail max-on override (which ignored a user's explicit `0 = Off`) was removed with it |
+| S4 | ~~Max-on accumulator resets every reboot; crash-looping unit gets a fresh window~~ | **REVERTED — was wrong (see §0).** Refusing to restore relay-ON after a crash/watchdog reboot was implemented, then removed: it meant a 3 a.m. transient fault left the customer with no hot water until the next schedule, to mitigate a hazard that does not exist here. The persisted state is always restored; the reset reason is logged and reported to RTDB (C5) so crash loops stay visible |
 | S5 | SNTP starts only if router is up within 15 s of boot (`wifi_prov.c:294`); after an outage the clock stays 1970 → all timers silently dead, stats keyed to 1970 | Call `time_sync_start_sntp()` from the `IP_EVENT_STA_GOT_IP` handler. One line |
 | S6 | App phone-time push races owner unlock; rejection silently swallowed → BLE-only device can run preset timers on a bogus clock | Sequence: push time immediately after unlock succeeds (`BleConnectionCubit` exposes unlock completion; `GeyserControlCubit` retries the push on it) |
 
@@ -112,7 +128,7 @@ Firmware: `try_fire_event` bounds check; custom-timer hour validation (BLE accep
 
 App: owner key in SharedPreferences → move to `flutter_secure_storage`; unlock-retry consumes nonce (covered by U8); emit-after-close edge in provisioning timeout; sync retry-on-WiFi without backoff + signed-out `StateError` spin; dual-isolate SQLite without `busy_timeout`; notifications page resolves device via BLE pairing only; permission-denied bail skips in-app message bridging; email verification decision; stale `_deviceId` across account switch; raw exception text in snackbars; app display name still "Gs Rework"; `ACCESS_FINE_LOCATION` missing `maxSdkVersion="30"`; stale majors (flutter_bloc 8, get_it 7) — upgrade post-MVP.
 
-Product risk register (explicit, not a code fix): **current sensing is staged but not built** (`current_sense.c` absent from CMakeLists) — no element-failure or welded-relay detection in MVP; the geyser's mechanical thermostat/TP valve is the last line of defense. State this in certification/insurance docs.
+Product risk register (explicit, not a code fix): **current sensing is staged but not built** (`current_sense.c` absent from CMakeLists) — so the MVP cannot detect a welded relay contact or a failed element. Per §0 this is a *functional* gap, not a safety one: a welded contact leaves the geyser permanently powered, i.e. behaving as an ordinary geyser under its own thermostat, so the impact is loss of scheduling/energy control (and a silently higher bill) rather than a hazard. Temperature-based protection still works whenever the sensor is healthy. Worth stating plainly in certification/insurance docs, including that this controller is not a safety device and does not replace the geyser's thermostat or TP valve.
 
 ---
 
@@ -128,7 +144,7 @@ Firmware: B1 (watchdog), B2 (scheduler day guard), B3 (sdkconfig regen + rollbac
 App: B4 (`allowLongWrite`), B5 (iOS workmanager + fallback).
 Exit gate: the field-test matrix in §8 passes on real hardware, both platforms.
 
-**Phase 2 — Safety majors (firmware release v0.6.0) (2–3 days)**
+**Phase 2 — Control & reliability majors (firmware release v0.6.0) (2–3 days)**
 S1–S6, plus C2 (SC-only pairing), C5 (boot health reporting), minors m: `try_fire_event` bounds, max-on/custom-timer validation.
 Ships as the **first field OTA** — which simultaneously proves the remote-update path end-to-end (B3 gate must already be green).
 
@@ -179,7 +195,7 @@ Real hardware, both an Android and an iOS phone:
 6. Power-cut the ESP → relay restores safely; schedule resumes after time sync.
 7. Single enabled timer fires on two consecutive days (B2).
 8. Thermostat cutoff at max temp; deadband honored (no chatter).
-9. Disconnect the DS18B20 while relay ON → chosen S3 policy observed; SENSOR_FAIL event reaches app and RTDB.
+9. Disconnect the DS18B20 while the geyser is powered → **relay stays ON** (geyser keeps running on its own thermostat), `SENSOR_FAIL` event reaches app and RTDB, user is notified, and the app shows "limits paused — sensor offline".
 10. OTA: publish test build → fleet updates; publish deliberately-crashing build to one bench unit → auto-rollback (B3).
 11. Second phone, same account: connects, unlocks, controls (U2/U9).
 12. Sign out → sign in as a different account: no data bleed, no stale FCM alerts (U3).

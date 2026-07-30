@@ -9,10 +9,12 @@ Last updated: 2026-07-01
 
 ## Fixed in the 2026-07-01 pass
 
-- [x] **Max-on safety timer is now an absolute ceiling** — previously it only
+- [x] **Max continuous run timer is now an absolute ceiling** — previously it only
   counted while the sensor was dead, so a stuck/mis-placed sensor or an
-  unreachable setpoint could leave the relay energised indefinitely.
-  (`temperature.c`)
+  unreachable setpoint could leave the geyser drawing power indefinitely and
+  running up the bill. (An energy/runtime guard, not a safety cutoff: the relay
+  switches the mains upstream of the geyser's own thermostat — see
+  `MVP_STABILIZATION_PLAN.md` §0.) (`temperature.c`)
 - [x] **Max-on timer is now flap-resistant** — the accumulator resets only when
   the relay is actually OFF, so an intermittently-recovering sensor can no
   longer keep zeroing the backstop. (`temperature.c`)
@@ -157,7 +159,7 @@ Last updated: 2026-07-01
   `0x0C` when no local mapping exists — but the `'g1'` fallback collision remains
   (see Medium).
 - ~~"Perfect as-is: `temperature.c`"~~ — the thermostat was correct but the
-  max-on backstop had the two safety gaps fixed above.
+  max continuous run timer had the two correctness gaps fixed above.
 
 ## Firmware dead code — status after 2026-07-04 cleanup
 

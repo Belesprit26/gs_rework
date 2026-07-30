@@ -126,7 +126,7 @@ const EVENT_LABELS = {
     body: (t) => `Temperature sensor is back online (${t}°C)`,
   },
   6: {
-    title: "Max-on safety off",
+    title: "Max run time reached",
     body: () => "Geyser turned off — maximum run time reached",
   },
 };

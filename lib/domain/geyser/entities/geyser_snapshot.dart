@@ -19,7 +19,9 @@ class GeyserSnapshot extends Equatable {
   /// Current water temperature in °C.  Negative means sensor offline.
   final double temperature;
 
-  /// Whether the geyser heating element is active.
+  /// Whether the relay is closed, i.e. mains is supplied to the geyser.
+  /// The element itself still cycles under the geyser's own thermostat
+  /// inside this window.
   final bool isOn;
 
   /// Minimum allowed temperature setting (°C).

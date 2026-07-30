@@ -17,7 +17,8 @@ class TelemetryEntries extends Table {
   /// Water temperature in °C (stored as real).
   RealColumn get temperature => real()();
 
-  /// Whether the geyser element was on (0 = off, 1 = on).
+  /// Whether the relay was closed — mains supplied to the geyser
+  /// (0 = off, 1 = on).
   BoolColumn get isOn => boolean().withDefault(const Constant(false))();
 
   /// Min temp limit at time of reading.
