@@ -55,7 +55,13 @@ abstract class BleRepository {
   Future<Uint8List> readCharacteristic(String characteristicId);
 
   /// Write raw bytes to a characteristic identified by [characteristicId].
-  Future<void> writeCharacteristic(String characteristicId, Uint8List value);
+  ///
+  /// Set [allowLongWrite] for payloads that can exceed MTU−3 bytes
+  /// (e.g. the Firebase auth data, whose refresh token alone is ~300
+  /// bytes); the platform then uses ATT prepared writes, which the
+  /// firmware reassembles into a single access callback.
+  Future<void> writeCharacteristic(String characteristicId, Uint8List value,
+      {bool allowLongWrite = false});
 
   /// Subscribe to notifications on a characteristic.
   /// Returns a stream of raw byte payloads each time the ESP32 notifies.

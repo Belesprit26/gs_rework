@@ -143,7 +143,8 @@ class MockBleRepository implements BleRepository {
   }
 
   @override
-  Future<void> writeCharacteristic(String characteristicId, Uint8List value) async {
+  Future<void> writeCharacteristic(String characteristicId, Uint8List value,
+      {bool allowLongWrite = false}) async {
     // Simulate ~30ms BLE write latency.
     await Future.delayed(const Duration(milliseconds: 30));
     _resolveWrite(characteristicId, value);

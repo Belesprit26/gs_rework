@@ -85,7 +85,10 @@ class BleProvisioningRepository {
   }) async {
     final payload = '$refreshToken\x00$deviceId';
     final bytes = Uint8List.fromList(utf8.encode(payload));
-    await _ble.writeCharacteristic(GattUuids.provAuthData.str, bytes);
+    // Refresh tokens are ~270-330 chars — beyond MTU−3 on both platforms,
+    // so this write must go out as an ATT long write.
+    await _ble.writeCharacteristic(GattUuids.provAuthData.str, bytes,
+        allowLongWrite: true);
     debugPrint('[Prov] Auth data written (deviceId="$deviceId", '
         'tokenLen=${refreshToken.length})');
   }
