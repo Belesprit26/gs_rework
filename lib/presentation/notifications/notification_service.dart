@@ -70,8 +70,9 @@ class NotificationService {
   // ── Public API ────────────────────────────────────────────────────
 
   /// Start monitoring BLE status and handling events.
-  /// Call once after DI setup.
+  /// Idempotent — safe to call again after [stop] (e.g. on re-login).
   void start() {
+    if (_bleSub != null) return;
     _bleSub = _ble.connectionStatus.listen(_onBleStatusChanged);
 
     // If already connected at start time, sync immediately.
@@ -80,13 +81,19 @@ class NotificationService {
     }
   }
 
-  /// Stop all monitoring and clean up.
+  /// Stop all monitoring. Reversible — [start] re-arms the service
+  /// (sign-out stops it; a re-login in the same session must be able
+  /// to bring it back). The unread stream stays open so UI listeners
+  /// survive the round-trip.
   Future<void> stop() async {
     await _eventSub?.cancel();
     _eventSub = null;
     await _bleSub?.cancel();
     _bleSub = null;
-    await _unreadCountController.close();
+    _lastUnreadCount = 0;
+    if (!_unreadCountController.isClosed) {
+      _unreadCountController.add(0);
+    }
   }
 
   /// Refresh the unread count (call after dismissing or changing prefs).
@@ -120,13 +127,23 @@ class NotificationService {
   Future<void> _syncBuffersAndSubscribe() async {
     try {
       // 1. Read buffered events from ESP.
-      await _syncEventBuffer();
+      final eventsOk = await _syncEventBuffer();
 
       // 2. Read buffered telemetry from ESP.
-      await _syncTelemetryBuffer();
+      final telemetryOk = await _syncTelemetryBuffer();
 
-      // 3. Acknowledge — clears both buffers on the ESP.
-      await _ackBuffers();
+      // 3. Acknowledge — clears both buffers on the ESP — but ONLY
+      //    when both reads and inserts succeeded. One transient BLE
+      //    error here must not erase a week of offline history; the
+      //    buffers stay on the device for the next connect, and the
+      //    sync above deduplicates by timestamp so a re-read never
+      //    double-inserts.
+      if (eventsOk && telemetryOk) {
+        await _ackBuffers();
+      } else {
+        debugLog('NotificationService',
+            'Buffer sync incomplete — ack withheld, retrying next connect');
+      }
 
       // 4. Subscribe to real-time event notifications.
       _subscribeToEvents();
@@ -142,15 +159,17 @@ class NotificationService {
   }
 
   /// Read the event buffer characteristic and insert records.
-  Future<void> _syncEventBuffer() async {
+  /// Returns true only when both the read and the insert succeeded —
+  /// the caller withholds the buffer ack otherwise.
+  Future<bool> _syncEventBuffer() async {
     try {
       final bytes = await _ble.readCharacteristic(
         GattUuids.deviceEvents.str,
       );
-      if (bytes.isEmpty) return;
+      if (bytes.isEmpty) return true;
 
       final deviceId = _rtdbDeviceId;
-      if (deviceId == null) return;
+      if (deviceId == null) return false;
 
       final notifications = <DeviceNotification>[];
 
@@ -175,25 +194,43 @@ class NotificationService {
       }
 
       if (notifications.isNotEmpty) {
-        await _notifications.insertBatch(notifications);
+        // Dedup against existing rows: a previously-failed sync leaves
+        // the ESP buffer un-acked, so the same events come back on the
+        // next connect. (The tables have no unique constraint.)
+        final existing = await _notifications.getAll(deviceId, limit: 300);
+        final seen = existing
+            .map((n) => '${n.type.name}|${n.timestamp.millisecondsSinceEpoch}')
+            .toSet();
+        final fresh = notifications
+            .where((n) => !seen.contains(
+                '${n.type.name}|${n.timestamp.millisecondsSinceEpoch}'))
+            .toList();
+        if (fresh.isNotEmpty) {
+          await _notifications.insertBatch(fresh);
+        }
         debugLog('NotificationService',
-            'Synced ${notifications.length} buffered events');
+            'Synced ${fresh.length} buffered events '
+            '(${notifications.length - fresh.length} duplicates skipped)');
       }
+      return true;
     } catch (e) {
-      debugLog('NotificationService', 'Event buffer read failed: $e');
+      debugLog('NotificationService', 'Event buffer sync failed: $e');
+      return false;
     }
   }
 
   /// Read the telemetry buffer characteristic and insert records.
-  Future<void> _syncTelemetryBuffer() async {
+  /// Returns true only when both the read and the insert succeeded —
+  /// the caller withholds the buffer ack otherwise.
+  Future<bool> _syncTelemetryBuffer() async {
     try {
       final bytes = await _ble.readCharacteristic(
         GattUuids.telemetryBuffer.str,
       );
-      if (bytes.isEmpty) return;
+      if (bytes.isEmpty) return true;
 
       final deviceId = _rtdbDeviceId;
-      if (deviceId == null) return;
+      if (deviceId == null) return false;
 
       final records = <TelemetryRecord>[];
 
@@ -222,12 +259,25 @@ class NotificationService {
       }
 
       if (records.isNotEmpty) {
-        await _telemetry.insertBatch(records);
+        // Dedup by timestamp — see _syncEventBuffer.
+        final existing = await _telemetry.getRecords(deviceId, limit: 300);
+        final seen = existing
+            .map((r) => r.timestamp.millisecondsSinceEpoch)
+            .toSet();
+        final fresh = records
+            .where((r) => !seen.contains(r.timestamp.millisecondsSinceEpoch))
+            .toList();
+        if (fresh.isNotEmpty) {
+          await _telemetry.insertBatch(fresh);
+        }
         debugLog('NotificationService',
-            'Synced ${records.length} buffered telemetry entries');
+            'Synced ${fresh.length} buffered telemetry entries '
+            '(${records.length - fresh.length} duplicates skipped)');
       }
+      return true;
     } catch (e) {
-      debugLog('NotificationService', 'Telemetry buffer read failed: $e');
+      debugLog('NotificationService', 'Telemetry buffer sync failed: $e');
+      return false;
     }
   }
 
@@ -277,6 +327,10 @@ class NotificationService {
 
           debugLog('NotificationService',
               'Real-time event: ${type.label} @ $temp°C');
+        }).catchError((Object e) {
+          // Contained: an unhandled error here would surface as a
+          // fatal zone error via Crashlytics.
+          debugLog('NotificationService', 'Real-time insert failed: $e');
         });
       },
     );

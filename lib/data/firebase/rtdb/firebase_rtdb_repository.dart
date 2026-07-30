@@ -83,8 +83,18 @@ class FirebaseRtdbRepository implements RtdbRepository {
     bool desiredState, {
     Duration timeout = const Duration(seconds: 2),
   }) async {
-    // 1. Write the desired state to the settings node.
-    await _userRef().child('set/$deviceId').update({'on': desiredState});
+    // 1. Write the desired state to the settings node. RTDB write
+    //    futures never complete while the phone is offline — without a
+    //    timeout this await (and the caller's isBusy spinner) hangs
+    //    indefinitely in a dead zone.
+    try {
+      await _userRef()
+          .child('set/$deviceId')
+          .update({'on': desiredState})
+          .timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      return false;
+    }
 
     // 2. Wait for the live node to confirm within the timeout.
     final completer = Completer<bool>();
