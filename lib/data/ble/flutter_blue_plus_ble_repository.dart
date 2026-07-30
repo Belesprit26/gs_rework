@@ -168,9 +168,14 @@ class FlutterBluePlusBleRepository implements BleRepository {
   }
 
   @override
-  Future<void> writeCharacteristic(String characteristicId, Uint8List value) async {
+  Future<void> writeCharacteristic(String characteristicId, Uint8List value,
+      {bool allowLongWrite = false}) async {
     final c = _resolveCharacteristic(characteristicId);
-    await _withRetry(() => c.write(value, withoutResponse: false));
+    await _withRetry(() => c.write(
+          value,
+          withoutResponse: false,
+          allowLongWrite: allowLongWrite,
+        ));
   }
 
   @override
