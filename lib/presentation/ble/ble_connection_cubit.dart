@@ -252,29 +252,9 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
       final nickname =
           nickBytes.isNotEmpty ? utf8.decode(nickBytes) : null;
 
-      String? ssid;
-      final isWifi = provStatus == ProvisioningStatus.complete ||
-          provStatus == ProvisioningStatus.wifiOk;
-      if (isWifi) {
-        try {
-          final ssidBytes =
-              await _ble.readCharacteristic(GattUuids.provWifiCreds.str);
-          if (isClosed) return;
-          ssid = ssidBytes.isNotEmpty ? utf8.decode(ssidBytes) : null;
-        } catch (_) {}
-      }
-
-      if (isClosed) return;
-      emit(state.copyWith(
-        deviceNickname: nickname,
-        isWifiProvisioned: isWifi,
-        wifiSsid: ssid,
-        pairedDeviceName: nickname != null && nickname.isNotEmpty
-            ? 'GeyserSwitch-$nickname'
-            : state.pairedDeviceName,
-      ));
-
       // Ensure we have an RTDB device ID mapping for this device.
+      // Resolved BEFORE the owner unlock (which needs it for the key
+      // lookup) and before any owner-gated reads.
       final bleMac = state.pairedDeviceId;
       if (bleMac != null && _prefs.getRtdbDeviceId(bleMac) == null) {
         // Try reading the stored device ID from the ESP (0x0C).
@@ -322,15 +302,39 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
         ));
       }
 
-      debugPrint('[BLE] Device info: nick="$nickname", '
-          'wifi=$isWifi, ssid="$ssid", prov=$provStatus');
-
-      // Owner-lock: prove this phone belongs to the household account
-      // so control writes are accepted. Runs after the device ID is
-      // resolved (unlock needs it to find the key).
+      // Owner-lock BEFORE any gated reads: the firmware gates the WiFi
+      // creds READ too, so reading the SSID pre-unlock was always
+      // rejected (the SSID never displayed) and burned ~1.2 s in the
+      // retry wrapper on a deterministic authorization failure.
       if (rtdbId != null) {
         await _runOwnerUnlock(rtdbId);
+        if (isClosed) return;
       }
+
+      String? ssid;
+      final isWifi = provStatus == ProvisioningStatus.complete ||
+          provStatus == ProvisioningStatus.wifiOk;
+      if (isWifi) {
+        try {
+          final ssidBytes =
+              await _ble.readCharacteristic(GattUuids.provWifiCreds.str);
+          if (isClosed) return;
+          ssid = ssidBytes.isNotEmpty ? utf8.decode(ssidBytes) : null;
+        } catch (_) {}
+      }
+
+      if (isClosed) return;
+      emit(state.copyWith(
+        deviceNickname: nickname,
+        isWifiProvisioned: isWifi,
+        wifiSsid: ssid,
+        pairedDeviceName: nickname != null && nickname.isNotEmpty
+            ? 'GeyserSwitch-$nickname'
+            : state.pairedDeviceName,
+      ));
+
+      debugPrint('[BLE] Device info: nick="$nickname", '
+          'wifi=$isWifi, ssid="$ssid", prov=$provStatus');
     } catch (e) {
       // Non-fatal — device may not have provisioning service yet.
       debugPrint('[BLE] Failed to read device info: $e');

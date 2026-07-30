@@ -60,8 +60,13 @@ abstract class BleRepository {
   /// (e.g. the Firebase auth data, whose refresh token alone is ~300
   /// bytes); the platform then uses ATT prepared writes, which the
   /// firmware reassembles into a single access callback.
+  ///
+  /// Set [retries] to false for writes that must NOT be replayed
+  /// verbatim on failure — the owner-auth unlock consumes its nonce per
+  /// attempt, so a blind retry sends a stale HMAC that is guaranteed to
+  /// be rejected.
   Future<void> writeCharacteristic(String characteristicId, Uint8List value,
-      {bool allowLongWrite = false});
+      {bool allowLongWrite = false, bool retries = true});
 
   /// Subscribe to notifications on a characteristic.
   /// Returns a stream of raw byte payloads each time the ESP32 notifies.

@@ -50,8 +50,29 @@ class BleOwnerAuth {
   final PrefsManager _prefs;
 
   /// Run the challenge-response unlock on the current connection.
+  ///
+  /// A rejection with a cached key retries ONCE with a key re-fetched
+  /// from Firestore: another household phone may have re-provisioned
+  /// the device with a different key, and without this recovery the
+  /// stale cache would lock this phone out permanently.
   Future<OwnerUnlockResult> unlock(String rtdbDeviceId) async {
-    // 1. Challenge. Older firmware has no 0x0E → nothing to unlock.
+    var result = await _attemptUnlock(rtdbDeviceId, forceCloudKey: false);
+    if (result == OwnerUnlockResult.locked) {
+      debugLog('OwnerAuth', 'Rejected — dropping cache, retrying with '
+          'cloud key');
+      await _prefs.setBleOwnerKey(rtdbDeviceId, '');
+      result = await _attemptUnlock(rtdbDeviceId, forceCloudKey: true);
+    }
+    return result;
+  }
+
+  Future<OwnerUnlockResult> _attemptUnlock(
+    String rtdbDeviceId, {
+    required bool forceCloudKey,
+  }) async {
+    // 1. Challenge — a FRESH nonce per attempt: the firmware consumes
+    //    it on every response, right or wrong. Older firmware has no
+    //    0x0E → nothing to unlock.
     Uint8List nonce;
     try {
       nonce = await _ble.readCharacteristic(GattUuids.ownerAuth.str);
@@ -61,7 +82,9 @@ class BleOwnerAuth {
     if (nonce.isEmpty) return OwnerUnlockResult.notRequired;
 
     // 2. Key — prefs cache, else the account's Firestore scope.
-    final key = await _obtainKey(rtdbDeviceId);
+    final key = forceCloudKey
+        ? await _fetchCloudKey(rtdbDeviceId)
+        : await _obtainKey(rtdbDeviceId);
     if (key == null) {
       debugLog('OwnerAuth', 'No key for $rtdbDeviceId (cache + cloud)');
       return OwnerUnlockResult.noKey;
@@ -69,10 +92,13 @@ class BleOwnerAuth {
 
     // 3. Response. The firmware rejects a wrong HMAC with an ATT
     //    authorization error, which surfaces here as a write failure.
+    //    retries: false — a transport-level retry would replay the HMAC
+    //    against an already-consumed nonce and read as a rejection.
     try {
       await _ble.writeCharacteristic(
         GattUuids.ownerAuth.str,
         computeUnlockResponse(key: key, nonce: nonce),
+        retries: false,
       );
       debugLog('OwnerAuth', 'Unlocked $rtdbDeviceId');
       return OwnerUnlockResult.unlocked;
@@ -80,6 +106,15 @@ class BleOwnerAuth {
       debugLog('OwnerAuth', 'Unlock rejected for $rtdbDeviceId: $e');
       return OwnerUnlockResult.locked;
     }
+  }
+
+  /// Key to install during (re-)provisioning: reuse the account's
+  /// existing key for this device when one exists — so every other
+  /// household phone's cached key keeps working — and generate a fresh
+  /// one only for a first-time (or factory-reset + key-less) setup.
+  Future<Uint8List> keyForProvisioning(String rtdbDeviceId) async {
+    final existing = await _obtainKey(rtdbDeviceId);
+    return existing ?? generateOwnerKey();
   }
 
   /// Persist a key locally + to the owning account's Firestore scope.
@@ -126,7 +161,12 @@ class BleOwnerAuth {
     if (cached != null && cached.isNotEmpty) {
       return Uint8List.fromList(base64Decode(cached));
     }
+    return _fetchCloudKey(rtdbDeviceId);
+  }
 
+  /// Fetch the key from Firestore (bypassing the prefs cache) and
+  /// refresh the cache on success.
+  Future<Uint8List?> _fetchCloudKey(String rtdbDeviceId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 

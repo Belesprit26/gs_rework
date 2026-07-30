@@ -63,10 +63,19 @@ class BleProvisioningRepository {
   /// Write the Firebase UID — this triggers the provisioning sequence
   /// on the device. If WiFi creds were written first, the device will
   /// attempt WiFi connection. Otherwise it does BLE-only provisioning.
-  Future<void> writeUserBinding(String uid) async {
-    final bytes = Uint8List.fromList(utf8.encode(uid));
+  ///
+  /// [deviceId] rides along as an additive "uid\0deviceId" suffix so
+  /// BLE-only provisioning (no auth-data write) still teaches the
+  /// firmware its RTDB identity for the 0x0C read. Old firmware treats
+  /// the payload as a C string and parses just the uid — harmless.
+  Future<void> writeUserBinding(String uid, {String? deviceId}) async {
+    final payload = deviceId != null && deviceId.isNotEmpty
+        ? '$uid\x00$deviceId'
+        : uid;
+    final bytes = Uint8List.fromList(utf8.encode(payload));
     await _ble.writeCharacteristic(GattUuids.provUserBind.str, bytes);
-    debugPrint('[Prov] User binding written (UID="$uid")');
+    debugPrint('[Prov] User binding written (UID="$uid", '
+        'deviceId=${deviceId ?? "-"})');
   }
 
   /// Read the current provisioning status.
@@ -150,7 +159,7 @@ class BleProvisioningRepository {
     }
 
     // 6. Write user binding — triggers the sequence.
-    await writeUserBinding(firebaseUid);
+    await writeUserBinding(firebaseUid, deviceId: deviceId);
   }
 
   /// Clean up subscriptions.

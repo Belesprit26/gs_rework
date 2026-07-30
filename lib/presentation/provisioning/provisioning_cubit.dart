@@ -8,8 +8,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
 import '../../core/ble/gatt_uuids.dart';
-import '../../core/ble/owner_auth_codec.dart';
 import '../../core/utils/device_id_generator.dart';
+import '../../domain/ble/ble_connection_status.dart';
 import '../../data/ble/ble_owner_auth.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../data/provisioning/ble_provisioning_repository.dart';
@@ -50,6 +50,7 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
   final DeviceRegistryCubit _registry;
   final BleOwnerAuth _ownerAuth;
   StreamSubscription<ProvisioningStatus>? _statusSub;
+  StreamSubscription<BleConnectionStatus>? _connSub;
   Timer? _timeout;
 
   /// Initialize — read device state, auto-detect WiFi SSID, get Firebase UID.
@@ -171,29 +172,34 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
 
     // Listen to status updates from the device.
     _statusSub = _prov.statusStream.listen((status) {
+      if (isClosed) return;
       _timeout?.cancel();
       emit(state.copyWith(deviceStatus: status));
 
       if (status.isTerminal) {
         emit(state.copyWith(step: ProvisioningStep.result));
+      } else {
+        // Non-terminal (e.g. CONNECTING): RE-ARM the safety timeout.
+        // The ESP shares one radio between BLE and WiFi and may drop
+        // the link while joining — the terminal notification then never
+        // arrives, and without a live timeout the sheet spins forever.
+        _armTimeout(const Duration(seconds: 30));
       }
     });
 
-    // Safety timeout — if no terminal notification arrives within 30 s,
-    // read the status once and transition so the modal doesn't hang.
-    _timeout = Timer(const Duration(seconds: 30), () async {
-      if (state.step != ProvisioningStep.inProgress) return;
-      try {
-        final status = await _prov.readStatus();
-        emit(state.copyWith(deviceStatus: status, step: ProvisioningStep.result));
-      } catch (_) {
-        emit(state.copyWith(
-          deviceStatus: ProvisioningStatus.error,
-          errorMessage: 'Timed out waiting for device response',
-          step: ProvisioningStep.result,
-        ));
+    // Fail fast(ish) on BLE loss: keep a short timeout armed while the
+    // link is down so the sheet exits with a readable result whether or
+    // not the device reconnects in time.
+    _connSub?.cancel();
+    _connSub = _ble.connectionStatus.listen((s) {
+      if (isClosed || state.step != ProvisioningStep.inProgress) return;
+      if (s == BleConnectionStatus.disconnected ||
+          s == BleConnectionStatus.reconnecting) {
+        _armTimeout(const Duration(seconds: 15));
       }
     });
+
+    _armTimeout(const Duration(seconds: 30));
 
     try {
       // Determine whether to send WiFi credentials.
@@ -248,10 +254,11 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
       }
       final deviceId = deriveDeviceId(bleMac);
 
-      // BLE owner-lock: a fresh 32-byte key per provisioning. The
-      // device stores it in NVS; every phone signed into this account
-      // retrieves it from Firestore to unlock BLE control.
-      final ownerKey = generateOwnerKey();
+      // BLE owner-lock: REUSE the account's existing key for this
+      // device when one exists (a rotation here would strand every
+      // other household phone on a stale cached key); generate a fresh
+      // 32-byte key only for first-time setup.
+      final ownerKey = await _ownerAuth.keyForProvisioning(deviceId);
 
       await _prov.provision(
         deviceNickname: state.deviceNickname,
@@ -309,10 +316,35 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
     }
   }
 
+  /// (Re-)arm the safety timeout: if no terminal notification arrives
+  /// within [after], read the status once and transition so the modal
+  /// never hangs.
+  void _armTimeout(Duration after) {
+    _timeout?.cancel();
+    _timeout = Timer(after, () async {
+      if (isClosed || state.step != ProvisioningStep.inProgress) return;
+      try {
+        final status = await _prov.readStatus();
+        if (isClosed) return;
+        emit(state.copyWith(deviceStatus: status, step: ProvisioningStep.result));
+      } catch (_) {
+        if (isClosed) return;
+        emit(state.copyWith(
+          deviceStatus: ProvisioningStatus.error,
+          errorMessage: 'Lost contact with the device — check that it is '
+              'powered and in range, then try again',
+          step: ProvisioningStep.result,
+        ));
+      }
+    });
+  }
+
   /// Reset to the configure step (for retry).
   void retry() {
     _statusSub?.cancel();
     _statusSub = null;
+    _connSub?.cancel();
+    _connSub = null;
     _timeout?.cancel();
     emit(state.copyWith(
       step: ProvisioningStep.configure,
@@ -325,6 +357,7 @@ class ProvisioningCubit extends Cubit<ProvisioningState> {
   Future<void> close() async {
     _timeout?.cancel();
     await _statusSub?.cancel();
+    await _connSub?.cancel();
     await _prov.dispose();
     return super.close();
   }

@@ -72,12 +72,12 @@ class FlutterBluePlusBleRepository implements BleRepository {
   Stream<List<ScannedDevice>> startScan({Duration timeout = _scanTimeout}) {
     _emitStatus(BleConnectionStatus.scanning);
 
-    // Scan without service UUID filter — some adapters don't report service
-    // UUIDs in advertisements. We filter by name prefix in the stream.
-    FlutterBluePlus.startScan(timeout: timeout);
+    final controller = StreamController<List<ScannedDevice>>();
 
     // Map the platform's scan results, filtering to GeyserSwitch* devices.
-    return FlutterBluePlus.scanResults.map((results) {
+    // Scan without service UUID filter — some adapters don't report service
+    // UUIDs in advertisements. We filter by name prefix in the stream.
+    final resultsSub = FlutterBluePlus.scanResults.map((results) {
       return results
           .where((r) =>
               r.advertisementData.advName.startsWith('GeyserSwitch'))
@@ -88,7 +88,58 @@ class FlutterBluePlusBleRepository implements BleRepository {
               ))
           .toList()
         ..sort((a, b) => b.rssi.compareTo(a.rssi)); // strongest first
+    }).listen(
+      (devices) {
+        if (!controller.isClosed) controller.add(devices);
+      },
+      onError: (Object e) {
+        if (!controller.isClosed) controller.addError(e);
+      },
+    );
+
+    // Close our stream when the platform scan actually ends (the 12 s
+    // platform timeout) — scanResults is a broadcast stream that never
+    // closes, so without this the listener's onDone never fired and
+    // the UI stayed in "scanning" until the user tapped Stop.
+    var sawScanning = false;
+    final scanningSub = FlutterBluePlus.isScanning.listen((scanning) {
+      if (scanning) {
+        sawScanning = true;
+      } else if (sawScanning && !controller.isClosed) {
+        _resetScanStatus();
+        controller.close();
+      }
     });
+
+    // Surface start failures (Android 12+ scan permission denied,
+    // adapter races). Previously fire-and-forget: the error was an
+    // unhandled zone exception, scanResults never errored, and the UI
+    // showed an empty "Scanning…" list forever.
+    FlutterBluePlus.startScan(timeout: timeout).catchError((Object e) {
+      if (!controller.isClosed) {
+        controller.addError(e);
+        _resetScanStatus();
+        controller.close();
+      }
+    });
+
+    controller.onCancel = () async {
+      await resultsSub.cancel();
+      await scanningSub.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  /// After a scan ends (naturally or on failure), restore the real
+  /// connection status — mirrors [stopScan].
+  void _resetScanStatus() {
+    if (_currentStatus != BleConnectionStatus.scanning) return;
+    if (_device != null && characteristics.isNotEmpty) {
+      _emitStatus(BleConnectionStatus.ready);
+    } else {
+      _emitStatus(BleConnectionStatus.disconnected);
+    }
   }
 
   @override
@@ -169,13 +220,18 @@ class FlutterBluePlusBleRepository implements BleRepository {
 
   @override
   Future<void> writeCharacteristic(String characteristicId, Uint8List value,
-      {bool allowLongWrite = false}) async {
+      {bool allowLongWrite = false, bool retries = true}) async {
     final c = _resolveCharacteristic(characteristicId);
-    await _withRetry(() => c.write(
+    Future<void> write() => c.write(
           value,
           withoutResponse: false,
           allowLongWrite: allowLongWrite,
-        ));
+        );
+    if (!retries) {
+      await write();
+      return;
+    }
+    await _withRetry(write);
   }
 
   @override
