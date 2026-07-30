@@ -7,10 +7,13 @@ import 'package:flutter/widgets.dart';
 
 import 'core/debug/debug_log.dart';
 import 'data/firebase/fcm/push_notification_manager.dart';
+import 'data/local/prefs_manager.dart';
 import 'data/sync/sync_orchestrator.dart';
 import 'data/sync/workmanager_config.dart';
 import 'data/telemetry/telemetry_recorder.dart';
 import 'di/locator.dart';
+import 'domain/notifications/repositories/notification_repository.dart';
+import 'domain/telemetry/repositories/telemetry_repository.dart';
 import 'firebase_options.dart';
 import 'presentation/app/app.dart';
 import 'presentation/notifications/notification_service.dart';
@@ -62,6 +65,19 @@ Future<void> main() async {
 
   // Workmanager daily task for midnight sync.
   await _guardedStart('Workmanager', initializeWorkmanager);
+
+  // Foreground fallback: background tasks are best-effort (especially
+  // iOS BGAppRefreshTask) — if the daily sync hasn't run in >26 h,
+  // run it now. Fire-and-forget so app launch isn't delayed.
+  unawaited(_guardedStart(
+    'SyncFallback',
+    () => runSyncFallbackIfOverdue(
+      orchestrator: getIt<SyncOrchestrator>(),
+      prefsManager: getIt<PrefsManager>(),
+      telemetryRepository: getIt<TelemetryRepository>(),
+      notificationRepository: getIt<NotificationRepository>(),
+    ),
+  ));
 
   runApp(const App());
 }

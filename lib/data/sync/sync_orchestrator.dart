@@ -109,6 +109,9 @@ class SyncOrchestrator {
       final hasPending = await sync.hasPendingRecords;
       if (!hasPending) {
         debugLog('SyncOrchestrator$tag', 'No pending records');
+        // Still a successful pass — stamp it so the foreground
+        // fallback doesn't re-run on every launch.
+        await prefs.setLastSyncTime(DateTime.now().toUtc());
         return true;
       }
 
