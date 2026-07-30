@@ -21,10 +21,9 @@ import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
 import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/neu/neu.dart';
+import '../shared/widgets/neu/neu_bottom_nav.dart';
 import '../shared/widgets/neu/neu_slider.dart';
-import '../shared/widgets/stat_tile.dart';
 import '../stats/device_stats_cubit.dart';
-import '../stats/stats_card.dart';
 import '../theme/app_colors.dart';
 import '../../domain/geyser/timer_presets.dart';
 
@@ -97,23 +96,23 @@ class _DashboardPageState extends State<DashboardPage> {
           _SettingsTab(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: NeuBottomNav(
         selectedIndex: _currentTab,
-        onDestinationSelected: (i) => setState(() => _currentTab = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
+        onSelected: (i) => setState(() => _currentTab = i),
+        items: const [
+          NeuNavItem(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard_rounded,
             label: 'Home',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart_rounded),
+          NeuNavItem(
+            icon: Icons.bar_chart_outlined,
+            selectedIcon: Icons.bar_chart_rounded,
             label: 'Usage',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
+          NeuNavItem(
+            icon: Icons.settings_outlined,
+            selectedIcon: Icons.settings_rounded,
             label: 'Settings',
           ),
         ],
@@ -142,14 +141,20 @@ class _DashboardPageState extends State<DashboardPage> {
 
     if (confirmed != true || !context.mounted) return;
 
+    // Grab context-dependent cubits before any awaits — the page can be
+    // disposed mid-teardown once auth state starts changing, and reading
+    // a deactivated context throws.
+    final bleCubit = context.read<BleConnectionCubit>();
+    final registryCubit = context.read<DeviceRegistryCubit>();
+
     // Tear down singletons that hold streams/subscriptions before
     // Firebase Auth signs out.  This prevents them from operating
     // on a signed-out auth context.
     await getIt<TelemetryRecorder>().stop();
     await getIt<NotificationService>().stop();
     await getIt<GeyserControlCubit>().resetForSignOut();
-    context.read<BleConnectionCubit>().unpair();
-    context.read<DeviceRegistryCubit>().clear();
+    bleCubit.unpair();
+    registryCubit.clear();
     await getIt<PrefsManager>().clearDeviceData();
 
     await getIt<SignOut>().call();
@@ -270,11 +275,6 @@ class _SingleDeviceHome extends StatelessWidget {
       builder: (context, state) {
         final snap = state.snapshot;
 
-        final enabledTimers = snap.timers.where((t) => t.enabled).toList();
-        final timerSubtitle = enabledTimers.isEmpty
-            ? 'No timers active'
-            : enabledTimers.map((t) => t.timeFormatted).join(' · ');
-
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
@@ -298,58 +298,16 @@ class _SingleDeviceHome extends StatelessWidget {
             const _ModeBanner(),
             const SizedBox(height: 12),
 
-            // Savings summary + quick-glance tiles. Additive: sits
-            // between the status banner and the Geyser Stats section.
+            // Savings summary + quick-glance tiles.
             const _SavingsCard(),
             const SizedBox(height: 14),
-            _AtAGlanceGrid(snapshot: snap),
-            const SizedBox(height: 18),
-
-            Text(
-              'Geyser Stats',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: 10),
-
-            StatTile(
-              icon: Icons.thermostat_outlined,
-              title: 'Temperature Range',
-              subtitle: snap.isSensorOffline
-                  ? 'Sensor offline — limits paused'
-                  : '${snap.minTemp}°C – ${snap.maxTemp}°C'
-                      '${snap.autoReheat ? ' (auto-reheat)' : ''}',
-              onTap: snap.isSensorOffline
+            _AtAGlanceGrid(
+              snapshot: snap,
+              onOpenTimers: () => _showTimerSettingsDialog(context, snap),
+              onOpenTempRange: snap.isSensorOffline
                   ? null
                   : () => _showTempLimitsDialog(context, snap),
             ),
-            const SizedBox(height: 8),
-            StatTile(
-              icon: Icons.timer_outlined,
-              title: 'Active Timers',
-              subtitle: timerSubtitle,
-              onTap: () => _showTimerSettingsDialog(context, snap),
-            ),
-            const SizedBox(height: 8),
-            StatTile(
-              icon: Icons.info_outline,
-              title: 'Firmware',
-              subtitle: snap.firmwareVersion ?? '–',
-            ),
-
-            const SizedBox(height: 16),
-            const StatsCard(),
-
-            if (state.error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                state.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-
-            const SizedBox(height: 24),
           ],
         );
       },
@@ -757,8 +715,10 @@ class _PresetTimerRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          // Time label (non-editable for presets) — debossed chip.
-          NeuInset(
+          // Time label (non-editable for presets) — inset + bold when
+          // active, raised + dull when off (see _TimeChip).
+          _TimeChip(
+            enabled: timer.enabled,
             child: Text(
               timer.timeFormatted,
               style: theme.textTheme.titleSmall?.copyWith(
@@ -787,6 +747,33 @@ class _PresetTimerRow extends StatelessWidget {
   String _offPeakLabel(int hour) {
     if (hour < 12) return 'Morning';
     return 'Afternoon';
+  }
+}
+
+/// Shared time-chip treatment for both preset and custom timer rows.
+///
+/// Enabled/active timers read as embedded into the surface (debossed +
+/// bold text); disabled timers recede, protruding slightly with dull
+/// text — the inverse of the usual "raised = active" convention, chosen
+/// deliberately so the active schedule looks fixed/committed.
+class _TimeChip extends StatelessWidget {
+  const _TimeChip({required this.enabled, required this.child});
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (enabled) return NeuInset(child: child);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.neuBase,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: neuRaisedShadows(distance: 3, blur: 6),
+      ),
+      child: child,
+    );
   }
 }
 
@@ -1475,21 +1462,11 @@ class _CustomTimerRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          // Tappable time button — raised when enabled, debossed when off.
+          // Tappable time button — inset + bold when active, raised +
+          // dull when off (see _TimeChip).
           GestureDetector(
             onTap: timer.enabled ? onPickTime : null,
-            child: timer.enabled
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.neuBase,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: neuRaisedShadows(distance: 3, blur: 6),
-                    ),
-                    child: timeChild,
-                  )
-                : NeuInset(child: timeChild),
+            child: _TimeChip(enabled: timer.enabled, child: timeChild),
           ),
           const SizedBox(width: 8),
           Text(
@@ -1790,17 +1767,37 @@ class _PeriodSegmented extends StatelessWidget {
 
 // ── At a glance grid ──────────────────────────────────────────────────
 //
-// Four quick-status tiles. Next timer + auto-reheat come from the geyser
-// snapshot; heated-today + cycles from DeviceStatsCubit.
+// Four quick-status tiles. Next timer + temperature come from the geyser
+// snapshot; heated-today + cycles from DeviceStatsCubit. Next-timer and
+// temperature tiles open their respective settings dialogs on tap.
 class _AtAGlanceGrid extends StatelessWidget {
-  const _AtAGlanceGrid({required this.snapshot});
+  const _AtAGlanceGrid({
+    required this.snapshot,
+    this.onOpenTimers,
+    this.onOpenTempRange,
+  });
 
   final GeyserSnapshot snapshot;
+
+  /// Opens the timer-settings dialog (Next timer tile).
+  final VoidCallback? onOpenTimers;
+
+  /// Opens the temperature-limits dialog (Temperature tile). Null disables
+  /// the tap — e.g. while the sensor is offline and limits are paused.
+  final VoidCallback? onOpenTempRange;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final next = _nextTimer(snapshot.timers);
+    final activeCount = snapshot.timers.where((t) => t.enabled).length;
+    final timerFootnote = 'Active timers: $activeCount';
+
+    final tempValue =
+        '${snapshot.minTemp}°–${snapshot.maxTemp}°C';
+    final tempFootnote = snapshot.isSensorOffline
+        ? 'Limits paused · sensor offline'
+        : (snapshot.autoReheat ? 'Auto-reheat on' : 'Auto-reheat off');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1816,23 +1813,30 @@ class _AtAGlanceGrid extends StatelessWidget {
           builder: (context, stats) {
             return Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _GlanceTile(
-                        label: 'Next timer',
-                        value: next?.$1 ?? 'None set',
-                        hint: next?.$2,
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _GlanceTile(
+                          label: 'Next timer',
+                          value: next?.$1 ?? 'None set',
+                          hint: next?.$2,
+                          footnote: timerFootnote,
+                          onTap: onOpenTimers,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _GlanceTile(
-                        label: 'Auto-reheat',
-                        value: snapshot.autoReheat ? 'On' : 'Off',
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _GlanceTile(
+                          label: 'Temperature',
+                          value: tempValue,
+                          footnote: tempFootnote,
+                          onTap: onOpenTempRange,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -1894,29 +1898,57 @@ class _AtAGlanceGrid extends StatelessWidget {
 }
 
 class _GlanceTile extends StatelessWidget {
-  const _GlanceTile({required this.label, required this.value, this.hint});
+  const _GlanceTile({
+    required this.label,
+    required this.value,
+    this.hint,
+    this.footnote,
+    this.onTap,
+  });
 
   final String label;
   final String value;
+
+  /// Small muted qualifier shown inline after [value].
   final String? hint;
+
+  /// Secondary line shown below [value] (e.g. auto-reheat state).
+  final String? footnote;
+
+  /// When non-null the tile is tappable and shows a chevron affordance.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SoftCard(
+    final tappable = onTap != null;
+
+    final card = SoftCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       borderRadius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.muted,
-              fontWeight: FontWeight.w700,
-              fontSize: 10.5,
-              letterSpacing: 0.6,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.muted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+              if (tappable)
+                const Icon(
+                  Icons.chevron_right,
+                  size: 15,
+                  color: AppColors.muted,
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Row(
@@ -1944,8 +1976,27 @@ class _GlanceTile extends StatelessWidget {
               ],
             ],
           ),
+          if (footnote != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              footnote!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.muted,
+                fontSize: 11,
+              ),
+            ),
+          ],
         ],
       ),
+    );
+
+    if (!tappable) return card;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: card,
     );
   }
 }
