@@ -33,8 +33,9 @@ android {
         applicationId = "com.geyserswitch.gs_orange"
         minSdk = 25
         targetSdk = flutter.targetSdkVersion
-        versionCode = 12
-        versionName = "1.0.12"
+        // Single source of truth: pubspec.yaml `version:` (name+code).
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     signingConfigs {
@@ -48,12 +49,23 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // key.properties is developer-local (gitignored). No silent
+            // debug-signing fallback — see taskGraph check below.
+            signingConfig = signingConfigs.getByName("release")
         }
+    }
+}
+
+// Fail loudly when building a release without the signing config rather
+// than producing an unsigned or debug-signed artifact.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.name.contains("Release") } &&
+        !keystorePropertiesFile.exists()
+    ) {
+        throw GradleException(
+            "android/key.properties not found — release builds must be " +
+                "signed with the upload keystore."
+        )
     }
 }
 
