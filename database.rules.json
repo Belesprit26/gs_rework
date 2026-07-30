@@ -75,6 +75,12 @@
           },
           "$did": {
             "boot":   { ".validate": "newData.isNumber()" },
+            "health": {
+              "rr":  { ".validate": "newData.isNumber()" },
+              "fw":  { ".validate": "newData.isString() && newData.val().length < 16" },
+              "at":  { ".validate": "newData.isNumber()" },
+              "$other": { ".validate": false }
+            },
             "$other": { ".validate": false }
           }
         },

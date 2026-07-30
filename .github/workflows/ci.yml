@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze (fail on warnings)
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      # Debug build validates the full Gradle config (Crashlytics plugin,
+      # google-services, desugaring) without needing the signing key.
+      # Release signing is deliberately absent in CI — the build fails
+      # fast if a release is attempted without key.properties.
+      - name: Android debug build
+        run: flutter build apk --debug
+
+      - name: Version bumped on main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          grep -E '^version: [0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$' pubspec.yaml \
+            || (echo "pubspec version malformed" && exit 1)
