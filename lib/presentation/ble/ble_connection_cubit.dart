@@ -178,7 +178,10 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
 
   // ── BLE re-acquisition ─────────────────────────────────────────────
 
+  // Parameter is not named `state` (as the overridden method declares)
+  // because that would shadow this Cubit's own `state` property.
   @override
+  // ignore: avoid_renaming_method_parameters
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
     if (lifecycleState == AppLifecycleState.resumed) {
       _probeReconnect('app resumed');
