@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/debug/debug_log.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/geyser/entities/geyser_live.dart';
@@ -374,8 +375,11 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
       emit(state.copyWith(mode: GeyserMode.ble));
       await _fetchInitialSnapshot();
       if (isClosed) return;
-      await _pushPhoneTime();
-      if (isClosed) return;
+      // Fire-and-forget with retries: the write is owner-gated on
+      // firmware and the unlock runs concurrently in BleConnectionCubit,
+      // so the first attempts can be rejected. Must not block stream
+      // startup while retrying.
+      unawaited(_pushPhoneTime());
       await _startStreams();
     } else if (status == BleConnectionStatus.disconnected ||
         status == BleConnectionStatus.reconnecting) {
@@ -407,12 +411,29 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   }
 
   /// Push the phone's current time to the ESP32 once per connection.
+  ///
+  /// Retries because the firmware gates this write behind the owner
+  /// unlock, which runs concurrently in BleConnectionCubit. A BLE-only
+  /// device that rebooted after a power cut has NO valid clock until
+  /// this succeeds — its schedule timers stay safely dormant, so the
+  /// push must not be silently dropped to a race.
   Future<void> _pushPhoneTime() async {
-    try {
-      await _geyser.pushPhoneTime();
-    } catch (e) {
-      // Non-fatal — old firmware may not have the time sync characteristic.
+    for (var attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await _geyser.pushPhoneTime();
+        return;
+      } on StateError {
+        // Old firmware without the time-sync characteristic — pointless
+        // to retry.
+        return;
+      } catch (_) {
+        // Most likely rejected because the owner unlock hasn't finished
+        // yet — wait and retry.
+      }
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (isClosed || !_bleReady) return;
     }
+    debugLog('GeyserControl', 'Phone-time push failed after retries');
   }
 
   Future<void> _startStreams() async {
