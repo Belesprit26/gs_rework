@@ -51,8 +51,9 @@ class TelemetryRecorder {
   // ── Public API ────────────────────────────────────────────────────
 
   /// Start monitoring BLE status and recording when connected.
-  /// Call once after DI setup.
+  /// Idempotent — safe to call again after [stop] (e.g. on re-login).
   void start() {
+    if (_bleSub != null) return;
     _bleSub = _ble.connectionStatus.listen(_onBleStatusChanged);
 
     // If already connected at start time, begin recording.

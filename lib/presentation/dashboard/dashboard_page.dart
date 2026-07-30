@@ -5,10 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 import '../../data/firebase/config/geyser_config_repository.dart';
+import '../../data/firebase/fcm/push_notification_manager.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../data/telemetry/telemetry_recorder.dart';
 import '../../di/locator.dart';
 import '../../domain/auth/usecases/sign_out.dart';
+import '../../domain/notifications/repositories/notification_repository.dart';
+import '../../domain/telemetry/repositories/telemetry_repository.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/notifications/entities/device_notification.dart';
@@ -156,6 +159,14 @@ class _DashboardPageState extends State<DashboardPage> {
     bleCubit.unpair();
     registryCubit.clear();
     await getIt<PrefsManager>().clearDeviceData();
+
+    // Account data hygiene. The Drift rows carry no uid — anything
+    // left behind would be uploaded into the NEXT signer's cloud
+    // account. And without deleting the FCM token, this phone keeps
+    // receiving the signed-out account's geyser alerts indefinitely.
+    await getIt<TelemetryRepository>().deleteAll();
+    await getIt<NotificationRepository>().deleteAll();
+    await getIt<PushNotificationManager>().unregisterToken();
 
     await getIt<SignOut>().call();
   }

@@ -476,6 +476,24 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
     emit(const GeyserControlState());
   }
 
+  /// Re-activate after a sign-in in the same app session — the mirror
+  /// of [resetForSignOut]. Restarts remote sync (BLE re-activation is
+  /// driven by the still-armed connection listener). [deviceId], when
+  /// given, re-points the cubit at the new account's device.
+  void reactivateAfterSignIn({String? deviceId}) {
+    if (isClosed) return;
+    if (deviceId != null && deviceId != _deviceId) {
+      _liveSub?.cancel();
+      _settingsSub?.cancel();
+      _heartbeat?.cancel();
+      _deviceId = deviceId;
+    }
+    if (!_bleReady && _rtdb != null) {
+      emit(state.copyWith(mode: GeyserMode.remote, deviceOffline: true));
+      _startRemoteSync();
+    }
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   @override

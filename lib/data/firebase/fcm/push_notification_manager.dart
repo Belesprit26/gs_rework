@@ -224,6 +224,34 @@ class PushNotificationManager {
     }
   }
 
+  /// Invalidate this install's FCM token — call on sign-out so the
+  /// phone stops receiving the account's geyser alerts. The backend's
+  /// send path prunes the (now unregistered) token from Firestore on
+  /// its next delivery attempt.
+  Future<void> unregisterToken() async {
+    try {
+      await _messaging.deleteToken();
+      debugLog('FCM', 'Token deleted on sign-out');
+    } catch (e) {
+      debugLog('FCM', 'Token delete failed: $e');
+    }
+  }
+
+  /// Register the install's current token under the signed-in user —
+  /// call after a sign-in. Needed because sign-out deletes the token,
+  /// and a refresh that fires while signed out cannot be registered
+  /// (the callable requires auth), so onTokenRefresh alone is not
+  /// enough for a same-session account switch.
+  Future<void> refreshRegistration() async {
+    if (!_initialized) return;
+    try {
+      final token = await _messaging.getToken();
+      if (token != null) await _registerToken(token);
+    } catch (e) {
+      debugLog('FCM', 'Token re-registration failed: $e');
+    }
+  }
+
   Future<void> _onForegroundMessage(RemoteMessage message) async {
     await _bridgeToLocalDb(message);
 

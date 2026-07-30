@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/widgets.dart';
@@ -14,6 +15,7 @@ import 'data/telemetry/telemetry_recorder.dart';
 import 'di/locator.dart';
 import 'domain/notifications/repositories/notification_repository.dart';
 import 'domain/telemetry/repositories/telemetry_repository.dart';
+import 'presentation/geyser/geyser_control_cubit.dart';
 import 'firebase_options.dart';
 import 'presentation/app/app.dart';
 import 'presentation/notifications/notification_service.dart';
@@ -65,6 +67,25 @@ Future<void> main() async {
 
   // Workmanager daily task for midnight sync.
   await _guardedStart('Workmanager', initializeWorkmanager);
+
+  // Sign-in reactivation: sign-out (dashboard_page) stops the
+  // per-account services, and nothing else restarts them until app
+  // relaunch. Only a signed-out → signed-in transition triggers this
+  // (the initial auth event is skipped), so cold-start behavior is
+  // unchanged; start() is idempotent regardless.
+  User? lastAuthUser = FirebaseAuth.instance.currentUser;
+  FirebaseAuth.instance.authStateChanges().listen((user) {
+    final cameBack = user != null && lastAuthUser == null;
+    lastAuthUser = user;
+    if (!cameBack) return;
+    getIt<TelemetryRecorder>().start();
+    getIt<NotificationService>().start();
+    unawaited(getIt<PushNotificationManager>().refreshRegistration());
+    final prefs = getIt<PrefsManager>();
+    final bleMac = prefs.pairedDeviceId;
+    final rtdbId = bleMac != null ? prefs.getRtdbDeviceId(bleMac) : null;
+    getIt<GeyserControlCubit>().reactivateAfterSignIn(deviceId: rtdbId);
+  });
 
   // Foreground fallback: background tasks are best-effort (especially
   // iOS BGAppRefreshTask) — if the daily sync hasn't run in >26 h,
