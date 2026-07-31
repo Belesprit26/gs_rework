@@ -14,6 +14,9 @@ class GeyserSnapshot extends Equatable {
     this.timers = const [],
     this.firmwareVersion,
     this.maxOnMinutes = 240,
+    this.onElapsedSeconds = 0,
+    this.intervalModeActive = false,
+    this.deviceClockValid = true,
   });
 
   /// Current water temperature in °C.  Negative means sensor offline.
@@ -43,6 +46,26 @@ class GeyserSnapshot extends Equatable {
   /// Max continuous relay-ON time in minutes (0 = disabled, default 240).
   final int maxOnMinutes;
 
+  /// How long the geyser has been continuously powered, in seconds.
+  /// 0 when off, or when the firmware predates GATT 0x0F.
+  final int onElapsedSeconds;
+
+  /// The device has no usable clock and is heating on a free-running
+  /// interval instead of the schedule.
+  final bool intervalModeActive;
+
+  /// Whether the device's clock is usable. Defaults to true so units on
+  /// firmware without GATT 0x0F never raise a false alarm.
+  final bool deviceClockValid;
+
+  /// Seconds left before the max continuous run limit switches the
+  /// geyser off, or null when it is off or no limit is set.
+  int? get runTimeRemainingSeconds {
+    if (!isOn || maxOnMinutes <= 0) return null;
+    final remaining = maxOnMinutes * 60 - onElapsedSeconds;
+    return remaining > 0 ? remaining : 0;
+  }
+
   /// True when the firmware reports the temperature sensor is unresponsive.
   /// The sentinel value -1 is only pushed by the firmware itself after
   /// confirmed sensor failure with rediscovery attempts exhausted.
@@ -57,6 +80,9 @@ class GeyserSnapshot extends Equatable {
     List<GeyserTimer>? timers,
     String? firmwareVersion,
     int? maxOnMinutes,
+    int? onElapsedSeconds,
+    bool? intervalModeActive,
+    bool? deviceClockValid,
   }) {
     return GeyserSnapshot(
       temperature: temperature ?? this.temperature,
@@ -67,6 +93,9 @@ class GeyserSnapshot extends Equatable {
       timers: timers ?? this.timers,
       firmwareVersion: firmwareVersion ?? this.firmwareVersion,
       maxOnMinutes: maxOnMinutes ?? this.maxOnMinutes,
+      onElapsedSeconds: onElapsedSeconds ?? this.onElapsedSeconds,
+      intervalModeActive: intervalModeActive ?? this.intervalModeActive,
+      deviceClockValid: deviceClockValid ?? this.deviceClockValid,
     );
   }
 
@@ -80,6 +109,9 @@ class GeyserSnapshot extends Equatable {
         timers,
         firmwareVersion,
         maxOnMinutes,
+        onElapsedSeconds,
+        intervalModeActive,
+        deviceClockValid,
       ];
 }
 

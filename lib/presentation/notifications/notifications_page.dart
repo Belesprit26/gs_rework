@@ -168,6 +168,10 @@ class _NotificationTile extends StatelessWidget {
         return Colors.teal;
       case NotificationType.maxOnTimeout:
         return Colors.deepOrange;
+      case NotificationType.clockLost:
+        return Colors.orange;
+      case NotificationType.scheduleRestored:
+        return Colors.teal;
       case NotificationType.unknown:
         return Colors.grey;
     }
@@ -187,6 +191,10 @@ class _NotificationTile extends StatelessWidget {
         return Icons.sensors;
       case NotificationType.maxOnTimeout:
         return Icons.timer_off_outlined;
+      case NotificationType.clockLost:
+        return Icons.schedule_outlined;
+      case NotificationType.scheduleRestored:
+        return Icons.schedule;
       case NotificationType.unknown:
         return Icons.help_outline;
     }

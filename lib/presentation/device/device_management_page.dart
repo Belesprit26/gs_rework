@@ -342,18 +342,24 @@ class _DeviceCard extends StatelessWidget {
 
 enum _Action { rename, remove, resetKey }
 
-// ── Max-On Safety Timer ──────────────────────────────────────────────
+// ── Max continuous run timer ─────────────────────────────────────────
 
 class _MaxOnTimerSection extends StatelessWidget {
   const _MaxOnTimerSection();
 
+  /// Durations stop two minutes short of the round hour on purpose.
+  /// A duration exactly equal to the gap between two scheduled slots
+  /// (2 h with timers at 04:00 and 06:00) would end one block at the
+  /// very moment the next timer fires; ending early keeps every block
+  /// boundary clean. Firmware ≥ 0.7.0 also guards against this, so the
+  /// values are belt-and-braces rather than load-bearing.
   static const _presets = [
     (label: 'Off', minutes: 0),
-    (label: '1 hour', minutes: 60),
-    (label: '2 hours', minutes: 120),
-    (label: '4 hours', minutes: 240),
-    (label: '6 hours', minutes: 360),
-    (label: '8 hours', minutes: 480),
+    (label: '58 min', minutes: 58),
+    (label: '1 h 58 m', minutes: 118),
+    (label: '3 h 58 m', minutes: 238),
+    (label: '5 h 58 m', minutes: 358),
+    (label: '7 h 58 m', minutes: 478),
   ];
 
   @override
@@ -446,12 +452,21 @@ class _MaxOnTimerSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Recommended: 4 hours. Caps how long the geyser can '
+                      'Recommended: 3 h 58 m. Caps how long the geyser can '
                       'draw power in one stretch. Your geyser\'s built-in '
                       'thermostat is unaffected.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade500,
                         fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Blocks end two minutes early so the next scheduled '
+                      'block starts cleanly.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade500,
+                        fontSize: 11,
                       ),
                     ),
                   ],

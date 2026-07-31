@@ -48,9 +48,11 @@ class BleGeyserControlRepository implements GeyserControlRepository {
       _ble.readCharacteristic(GattUuids.timerConfig.str),
       _ble.readCharacteristic(GattUuids.deviceInfo.str),
       _readMaxOnSafe(),
+      _readOptional(GattUuids.runStatus.str),
     ]);
 
     final limitsBytes = results[2];
+    final runStatus = results[6];
 
     _lastSnapshot = GeyserSnapshot(
       temperature: _decodeTemperature(results[0]),
@@ -61,8 +63,33 @@ class BleGeyserControlRepository implements GeyserControlRepository {
       timers: _decodeTimers(results[3]),
       firmwareVersion: utf8.decode(results[4]),
       maxOnMinutes: _decodeMaxOn(results[5]),
+      onElapsedSeconds: _decodeElapsed(runStatus),
+      intervalModeActive: _decodeFlag(runStatus, 0x01),
+      // Absent characteristic (pre-0.7.0 firmware) must not raise a
+      // false "clock lost" alarm, so default to valid.
+      deviceClockValid:
+          runStatus.length < 7 ? true : _decodeFlag(runStatus, 0x02),
     );
     return _lastSnapshot;
+  }
+
+  /// Read a characteristic that older firmware may not expose.
+  Future<Uint8List> _readOptional(String uuid) async {
+    try {
+      return await _ble.readCharacteristic(uuid);
+    } catch (_) {
+      return Uint8List(0);
+    }
+  }
+
+  int _decodeElapsed(Uint8List bytes) {
+    if (bytes.length < 7) return 0;
+    return ByteData.sublistView(bytes, 0, 4).getUint32(0, Endian.little);
+  }
+
+  bool _decodeFlag(Uint8List bytes, int mask) {
+    if (bytes.length < 7) return false;
+    return (bytes[6] & mask) != 0;
   }
 
   /// Read max-on timer, returning empty bytes if the characteristic

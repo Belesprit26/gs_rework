@@ -93,9 +93,15 @@ abstract final class GattUuids {
   /// creating a new device ID.
   static final storedDeviceId = Guid('4753000c-7652-4543-b201-c4b801a6c700');
 
-  /// Max-on safety timer — Read, Write (encrypted).
+  /// Max continuous run timer — Read, Write (encrypted).
   /// Format: uint16 LE — minutes (0 = disabled).
   static final maxOnTimer = Guid('4753000d-7652-4543-b201-c4b801a6c700');
+
+  /// Run status — Read only. Absent on firmware older than 0.7.0.
+  /// Format (7 bytes LE): uint32 elapsed ON seconds, uint16 max-on
+  /// minutes echo, uint8 flags (bit0 interval mode active, bit1 clock
+  /// usable, bit2 sensor ok).
+  static final runStatus = Guid('4753000f-7652-4543-b201-c4b801a6c700');
 
   // ── Owner lock ───────────────────────────────────────────────────
 

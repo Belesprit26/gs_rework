@@ -307,6 +307,10 @@ class _SingleDeviceHome extends StatelessWidget {
             const SizedBox(height: 12),
 
             const _ModeBanner(),
+            if (!snap.deviceClockValid) ...[
+              const SizedBox(height: 8),
+              _ClockLostBanner(intervalMode: snap.intervalModeActive),
+            ],
             const SizedBox(height: 12),
 
             // Savings summary + quick-glance tiles.
@@ -315,9 +319,10 @@ class _SingleDeviceHome extends StatelessWidget {
             _AtAGlanceGrid(
               snapshot: snap,
               onOpenTimers: () => _showTimerSettingsDialog(context, snap),
-              onOpenTempRange: snap.isSensorOffline
-                  ? null
-                  : () => _showTempLimitsDialog(context, snap),
+              // Always tappable: limits are only PAUSED while the sensor
+              // is offline, and the user may well want to set them up
+              // ready for it coming back. The dialog says so itself.
+              onOpenTempRange: () => _showTempLimitsDialog(context, snap),
             ),
           ],
         );
@@ -506,6 +511,36 @@ class _SingleDeviceHome extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Reachable while the sensor is offline on purpose —
+              // limits are paused, not invalid, and can be set up ready
+              // for it recovering.
+              if (snap.isSensorOffline) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.sensors_off,
+                          size: 18, color: Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Sensor offline — these limits are paused and '
+                          'will resume automatically once it reconnects.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               // ── Min temp slider ────────────────────────────────
               Row(
                 children: [
@@ -1269,6 +1304,10 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Colors.teal;
       case NotificationType.maxOnTimeout:
         return Colors.deepOrange;
+      case NotificationType.clockLost:
+        return Colors.orange;
+      case NotificationType.scheduleRestored:
+        return Colors.teal;
       case NotificationType.unknown:
         return Colors.grey;
     }
@@ -1288,6 +1327,10 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Icons.sensors;
       case NotificationType.maxOnTimeout:
         return Icons.timer_off_outlined;
+      case NotificationType.clockLost:
+        return Icons.schedule_outlined;
+      case NotificationType.scheduleRestored:
+        return Icons.schedule;
       case NotificationType.unknown:
         return Icons.help_outline;
     }
@@ -1306,10 +1349,84 @@ class _NotificationTypeToggle extends StatelessWidget {
       case NotificationType.sensorRecover:
         return 'When the temperature sensor comes back online';
       case NotificationType.maxOnTimeout:
-        return 'When geyser forced off after max continuous run';
+        return 'When the geyser switches off after its max run time';
+      case NotificationType.clockLost:
+        return 'When the device loses its clock and pauses the schedule';
+      case NotificationType.scheduleRestored:
+        return 'When the clock is set again and the schedule resumes';
       case NotificationType.unknown:
         return 'Unknown event type';
     }
+  }
+}
+
+/// Compact duration for run-time-remaining copy ("2 h 15 m", "45 m").
+String _formatDuration(int seconds) {
+  if (seconds < 60) return '<1 m';
+  final totalMinutes = seconds ~/ 60;
+  final h = totalMinutes ~/ 60;
+  final m = totalMinutes % 60;
+  if (h == 0) return '$m m';
+  if (m == 0) return '$h h';
+  return '$h h $m m';
+}
+
+// ── Device clock lost banner ──────────────────────────────────────────
+//
+// The device's schedule is wall-clock based, so without a usable clock
+// it cannot run. Firmware ≥ 0.7.0 keeps heating on a free-running
+// interval at the same daily duty meanwhile. The fix is automatic — the
+// app pushes the phone's time on every Bluetooth connection — so this
+// explains what happened rather than asking the user to do anything.
+
+class _ClockLostBanner extends StatelessWidget {
+  const _ClockLostBanner({required this.intervalMode});
+
+  final bool intervalMode;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.schedule_outlined,
+              size: 20, color: Colors.orange.shade800),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  intervalMode
+                      ? 'Schedule paused — running on a backup timer'
+                      : 'Device clock not set',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Staying connected here sets the time again and '
+                  'restores your timers.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1802,7 +1919,19 @@ class _AtAGlanceGrid extends StatelessWidget {
     final theme = Theme.of(context);
     final next = _nextTimer(snapshot.timers);
     final activeCount = snapshot.timers.where((t) => t.enabled).length;
-    final timerFootnote = 'Active timers: $activeCount';
+
+    // While the geyser is on, how long it has left is more useful than
+    // the timer count. Applies to every switch-on — schedule, manual or
+    // remote — so the wording stays generic.
+    final remaining = snapshot.runTimeRemainingSeconds;
+    final String timerFootnote;
+    if (snapshot.isOn && remaining != null) {
+      timerFootnote = 'Running · ${_formatDuration(remaining)} left';
+    } else if (snapshot.isOn) {
+      timerFootnote = 'Running · no run limit set';
+    } else {
+      timerFootnote = 'Active timers: $activeCount';
+    }
 
     final tempValue =
         '${snapshot.minTemp}°–${snapshot.maxTemp}°C';

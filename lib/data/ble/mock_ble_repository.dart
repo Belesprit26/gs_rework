@@ -221,6 +221,10 @@ class MockBleRepository implements BleRepository {
     if (characteristicId == GattUuids.provWifiCreds.str) {
       return Uint8List(0); // No SSID stored.
     }
+    // Run status: not running, 4 h limit, clock usable + sensor ok.
+    if (characteristicId == GattUuids.runStatus.str) {
+      return Uint8List.fromList([0, 0, 0, 0, 240, 0, 0x06]);
+    }
     // Event & telemetry buffers — return empty.
     if (characteristicId == GattUuids.deviceEvents.str) {
       return Uint8List(0);

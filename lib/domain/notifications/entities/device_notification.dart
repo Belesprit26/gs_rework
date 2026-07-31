@@ -29,6 +29,12 @@ enum NotificationType {
   /// Power switched off after the max continuous run time was reached.
   maxOnTimeout(0x06, 'Max Run Time Reached'),
 
+  /// Device clock unusable — schedule paused, running on a backup timer.
+  clockLost(0x07, 'Schedule Paused'),
+
+  /// Device clock recovered — normal schedule resumed.
+  scheduleRestored(0x08, 'Schedule Resumed'),
+
   /// Unrecognised event code from firmware.
   unknown(0x00, 'Unknown Event');
 
@@ -113,6 +119,12 @@ class DeviceNotification extends Equatable {
       // the same event arrives by either path.
       case NotificationType.maxOnTimeout:
         return 'Geyser turned off — maximum run time reached';
+      case NotificationType.clockLost:
+        return 'Device clock not set — heating on a backup timer until '
+            'it reconnects';
+      case NotificationType.scheduleRestored:
+        return 'Device clock is set again — your schedule is running '
+            'normally';
       case NotificationType.unknown:
         return 'Unknown event at $temperature°C';
     }
