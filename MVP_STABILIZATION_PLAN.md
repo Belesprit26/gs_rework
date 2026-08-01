@@ -22,6 +22,22 @@ The original audit (2026-07-30) assumed element-level switching and recommended 
 
 ---
 
+## 0b. Scheduling model (firmware 0.7.0 / app 1.0.13+)
+
+**Timers switch ON; the run limit switches OFF.** Together they form a complete time-based control loop that needs no sensor — so when the sensor fails the system degrades into time-only control by itself, with no special mode required. The temperature setpoint stays active throughout as a ceiling that can end a block early (it is the layer that catches a stuck geyser thermostat, per §0); it simply stops being the thing that usually ends the block.
+
+**Overlapping slots: the running block wins.** A timer whose time falls inside an active block is ignored — the original allocated duration runs out. The app shows the remaining time so this is visible rather than surprising.
+
+**Block boundaries.** A duration exactly equal to the gap between two slots would end one block at the very moment the next timer fires. Two independent guards: the app's duration presets stop two minutes short of the hour (58 m, 1 h 58 m, 3 h 58 m …), and firmware suppresses any timer firing within 60 s of a run-limit cutoff — so a hand-picked duration is safe too.
+
+**The run window survives a reboot.** The ON-stretch start is stamped as a wall-clock epoch and persisted next to the relay state, so a unit that restarts mid-block resumes the same window instead of restarting it. Falls back to a RAM counter when the clock is unusable.
+
+**Clock-less interval fallback.** The schedule is wall-clock based, so a BLE-only unit that has never been told the time — or one rebooted after an outage with the router still down — would otherwise do nothing. Interval mode then heats on a free-running counter at the *same daily duty the user's own schedule asks for*, preserving their energy budget even though the phase is unknowable. It only stands in when at least one timer is enabled, honours a per-device opt-out, waits 15 minutes after boot, and self-cancels the instant the clock returns — which happens automatically on the next BLE connect, since the app pushes phone time. Surfaced via `EVT_CLOCK_LOST` / `EVT_SCHEDULE_OK` and a dashboard banner.
+
+**Deployment note:** all of this is additive — a new read-only characteristic (`0x0F`) and two new event codes. Old app ↔ new firmware and new app ↔ old firmware both behave as before, and `0x0F` was deliberately kept **off** the RTDB `live` node so this firmware does **not** depend on a security-rules deploy.
+
+---
+
 ## 1. Verdict & principles
 
 The codebase is structurally sound: the BLE protocol contract is byte-verified on both sides (UUIDs, endianness, clamps, HMAC owner-auth with a shared RFC 4231 test vector), sync is crash-safe by construction, Firebase rules are deny-by-default and uid-scoped, TLS is enforced everywhere, and OTA uses true A/B partitions. What blocks release is a short list of high-impact defects, most with small fixes.
@@ -195,7 +211,11 @@ Real hardware, both an Android and an iOS phone:
 6. Power-cut the ESP → relay restores safely; schedule resumes after time sync.
 7. Single enabled timer fires on two consecutive days (B2).
 8. Thermostat cutoff at max temp; deadband honored (no chatter).
-9. Disconnect the DS18B20 while the geyser is powered → **relay stays ON** (geyser keeps running on its own thermostat), `SENSOR_FAIL` event reaches app and RTDB, user is notified, and the app shows "limits paused — sensor offline".
+9. Disconnect the DS18B20 while the geyser is powered → **relay stays ON** (geyser keeps running on its own thermostat), `SENSOR_FAIL` event reaches app and RTDB, user is notified, and the app shows "limits paused — sensor offline". Temperature-limits dialog still opens, with the paused banner.
+16. **Scheduling (0.7.0):** two timers 2 h apart with a 1 h 58 m duration → two clean blocks, no flap at the boundary. Then set a hand-picked 2 h 0 m duration → firmware's 60 s guard prevents the immediate re-fire.
+17. **Run window across reboot:** start a block, power-cycle mid-block → the app shows the *remaining* time continuing, not a fresh full window.
+18. **Interval fallback:** BLE-only unit with timers enabled and no clock (factory-reset or WiFi withheld) → after 15 min it begins cycling at the schedule's duty, `EVT_CLOCK_LOST` fires, and the dashboard shows the clock banner. Connect the app → clock is pushed, `EVT_SCHEDULE_OK` fires, banner clears, normal schedule resumes.
+19. **Fallback restraint:** same unit with *no* timers enabled → no cycling at all (manual-only users must not be surprised).
 10. OTA: publish test build → fleet updates; publish deliberately-crashing build to one bench unit → auto-rollback (B3).
 11. Second phone, same account: connects, unlocks, controls (U2/U9).
 12. Sign out → sign in as a different account: no data bleed, no stale FCM alerts (U3).
