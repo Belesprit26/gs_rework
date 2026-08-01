@@ -260,7 +260,11 @@ class NotificationService {
 
       if (records.isNotEmpty) {
         // Dedup by timestamp — see _syncEventBuffer.
-        final existing = await _telemetry.getRecords(deviceId, limit: 300);
+        // Window must exceed what the recorder can insert between two
+        // connections (1/min while connected) plus the ESP buffer, or
+        // rows from a withheld ack fall outside it and re-insert as
+        // duplicates. 3000 ≈ two days of continuous recording.
+        final existing = await _telemetry.getRecords(deviceId, limit: 3000);
         final seen = existing
             .map((r) => r.timestamp.millisecondsSinceEpoch)
             .toSet();

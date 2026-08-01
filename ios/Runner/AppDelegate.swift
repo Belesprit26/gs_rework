@@ -1,6 +1,9 @@
 import Flutter
 import UIKit
-import workmanager
+// Module is `workmanager_apple` — the plugin split its Apple pod out
+// under that name; `import workmanager` does not resolve and fails the
+// Swift build.
+import workmanager_apple
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {

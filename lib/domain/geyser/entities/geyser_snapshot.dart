@@ -17,6 +17,7 @@ class GeyserSnapshot extends Equatable {
     this.onElapsedSeconds = 0,
     this.intervalModeActive = false,
     this.deviceClockValid = true,
+    this.runStatusReadAt,
   });
 
   /// Current water temperature in °C.  Negative means sensor offline.
@@ -58,11 +59,25 @@ class GeyserSnapshot extends Equatable {
   /// firmware without GATT 0x0F never raise a false alarm.
   final bool deviceClockValid;
 
+  /// When [onElapsedSeconds] was read from the device. Null means we
+  /// have no run-status reading at all — over RTDB, or on firmware
+  /// without GATT 0x0F — in which case remaining time is unknowable
+  /// and must not be guessed.
+  final DateTime? runStatusReadAt;
+
   /// Seconds left before the max continuous run limit switches the
-  /// geyser off, or null when it is off or no limit is set.
+  /// geyser off. Null when the geyser is off, no limit is set, or we
+  /// have no run-status reading to derive it from.
+  ///
+  /// Ages the reading forward from when it was taken, so the figure
+  /// stays truthful between reads instead of freezing at connect time.
   int? get runTimeRemainingSeconds {
     if (!isOn || maxOnMinutes <= 0) return null;
-    final remaining = maxOnMinutes * 60 - onElapsedSeconds;
+    final readAt = runStatusReadAt;
+    if (readAt == null) return null;
+    final elapsed =
+        onElapsedSeconds + DateTime.now().difference(readAt).inSeconds;
+    final remaining = maxOnMinutes * 60 - elapsed;
     return remaining > 0 ? remaining : 0;
   }
 
@@ -83,6 +98,7 @@ class GeyserSnapshot extends Equatable {
     int? onElapsedSeconds,
     bool? intervalModeActive,
     bool? deviceClockValid,
+    DateTime? runStatusReadAt,
   }) {
     return GeyserSnapshot(
       temperature: temperature ?? this.temperature,
@@ -96,6 +112,7 @@ class GeyserSnapshot extends Equatable {
       onElapsedSeconds: onElapsedSeconds ?? this.onElapsedSeconds,
       intervalModeActive: intervalModeActive ?? this.intervalModeActive,
       deviceClockValid: deviceClockValid ?? this.deviceClockValid,
+      runStatusReadAt: runStatusReadAt ?? this.runStatusReadAt,
     );
   }
 
@@ -112,6 +129,7 @@ class GeyserSnapshot extends Equatable {
         onElapsedSeconds,
         intervalModeActive,
         deviceClockValid,
+        runStatusReadAt,
       ];
 }
 

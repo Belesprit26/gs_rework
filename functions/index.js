@@ -129,6 +129,18 @@ const EVENT_LABELS = {
     title: "Max run time reached",
     body: () => "Geyser turned off — maximum run time reached",
   },
+  // Must stay in step with the Dart copy in device_notification.dart —
+  // the same event arrives by either path (BLE or FCM).
+  7: {
+    title: "Schedule paused",
+    body: () =>
+      "Device clock not set — heating on a backup timer until it reconnects",
+  },
+  8: {
+    title: "Schedule resumed",
+    body: () =>
+      "Device clock is set again — your schedule is running normally",
+  },
 };
 
 exports.onDeviceEvent = onValueWritten("gs/{uid}/events/{did}", async (event) => {

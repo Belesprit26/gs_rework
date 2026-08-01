@@ -171,11 +171,18 @@ class PrefsManager {
 
   // ── Sign-out cleanup ──────────────────────────────────────────────
 
-  /// Remove all device mappings, nicknames, and pairing data.
-  /// Called on sign-out so the next user starts fresh.
+  /// Remove all device mappings, nicknames, cached BLE owner keys, and
+  /// pairing data. Called on sign-out so the next user starts fresh.
+  ///
+  /// The owner keys MUST go: they are what proves this phone belongs to
+  /// the previous account's household. Leaving them behind would let
+  /// the next person to sign in on this handset unlock — and re-bind —
+  /// the previous owner's geyser, and would let it be copied into their
+  /// cloud scope on the next provisioning.
   Future<void> clearDeviceData() async {
     final keysToRemove = _prefs.getKeys().where((k) =>
         k.startsWith(_kRtdbDidPrefix) ||
+        k.startsWith(_kOwnerKeyPrefix) ||
         k.startsWith(_kDeviceNickPrefix));
     for (final key in keysToRemove.toList()) {
       await _prefs.remove(key);

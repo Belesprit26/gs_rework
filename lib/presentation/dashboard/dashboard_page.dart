@@ -1927,8 +1927,13 @@ class _AtAGlanceGrid extends StatelessWidget {
     final String timerFootnote;
     if (snapshot.isOn && remaining != null) {
       timerFootnote = 'Running · ${_formatDuration(remaining)} left';
-    } else if (snapshot.isOn) {
+    } else if (snapshot.isOn && snapshot.maxOnMinutes <= 0) {
       timerFootnote = 'Running · no run limit set';
+    } else if (snapshot.isOn) {
+      // A limit exists but we have no run-status reading to age from
+      // (remote mode, or firmware without 0x0F) — say so rather than
+      // invent a countdown.
+      timerFootnote = 'Running';
     } else {
       timerFootnote = 'Active timers: $activeCount';
     }

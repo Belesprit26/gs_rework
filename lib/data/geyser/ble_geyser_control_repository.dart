@@ -69,6 +69,10 @@ class BleGeyserControlRepository implements GeyserControlRepository {
       // false "clock lost" alarm, so default to valid.
       deviceClockValid:
           runStatus.length < 7 ? true : _decodeFlag(runStatus, 0x02),
+      // Null when the characteristic is absent — the UI then knows the
+      // remaining run time is unknown rather than showing a number it
+      // cannot support.
+      runStatusReadAt: runStatus.length < 7 ? null : DateTime.now(),
     );
     return _lastSnapshot;
   }

@@ -101,11 +101,16 @@ class FlutterBluePlusBleRepository implements BleRepository {
     // platform timeout) — scanResults is a broadcast stream that never
     // closes, so without this the listener's onDone never fired and
     // the UI stayed in "scanning" until the user tapped Stop.
-    var sawScanning = false;
+    //
+    // `started` is armed by the startScan FUTURE, not by isScanning:
+    // the plugin emits true→false synchronously around a failed start
+    // (and around restarting an in-flight scan), so gating on the
+    // stream would close this controller before catchError could
+    // report the error — swallowing exactly the permission-denied
+    // case this exists to surface.
+    var started = false;
     final scanningSub = FlutterBluePlus.isScanning.listen((scanning) {
-      if (scanning) {
-        sawScanning = true;
-      } else if (sawScanning && !controller.isClosed) {
+      if (!scanning && started && !controller.isClosed) {
         _resetScanStatus();
         controller.close();
       }
@@ -115,7 +120,9 @@ class FlutterBluePlusBleRepository implements BleRepository {
     // adapter races). Previously fire-and-forget: the error was an
     // unhandled zone exception, scanResults never errored, and the UI
     // showed an empty "Scanning…" list forever.
-    FlutterBluePlus.startScan(timeout: timeout).catchError((Object e) {
+    FlutterBluePlus.startScan(timeout: timeout).then((_) {
+      started = true;
+    }).catchError((Object e) {
       if (!controller.isClosed) {
         controller.addError(e);
         _resetScanStatus();

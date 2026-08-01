@@ -58,9 +58,11 @@ class BleOwnerAuth {
   Future<OwnerUnlockResult> unlock(String rtdbDeviceId) async {
     var result = await _attemptUnlock(rtdbDeviceId, forceCloudKey: false);
     if (result == OwnerUnlockResult.locked) {
-      debugLog('OwnerAuth', 'Rejected — dropping cache, retrying with '
-          'cloud key');
-      await _prefs.setBleOwnerKey(rtdbDeviceId, '');
+      // Retry with a freshly fetched cloud key, but do NOT discard the
+      // cached one first: a rejection can also come from a dropped link
+      // mid-write, and if we are offline the cache is the only key we
+      // have. _fetchCloudKey overwrites the cache itself on success.
+      debugLog('OwnerAuth', 'Rejected — retrying with cloud key');
       result = await _attemptUnlock(rtdbDeviceId, forceCloudKey: true);
     }
     return result;
@@ -81,9 +83,12 @@ class BleOwnerAuth {
     }
     if (nonce.isEmpty) return OwnerUnlockResult.notRequired;
 
-    // 2. Key — prefs cache, else the account's Firestore scope.
+    // 2. Key — prefs cache, else the account's Firestore scope. On the
+    //    forced-cloud retry, fall back to the cache when the fetch
+    //    fails (offline), so a transient BLE error cannot cost us the
+    //    only key we hold.
     final key = forceCloudKey
-        ? await _fetchCloudKey(rtdbDeviceId)
+        ? (await _fetchCloudKey(rtdbDeviceId) ?? await _obtainKey(rtdbDeviceId))
         : await _obtainKey(rtdbDeviceId);
     if (key == null) {
       debugLog('OwnerAuth', 'No key for $rtdbDeviceId (cache + cloud)');
