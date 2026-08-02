@@ -6,7 +6,12 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+// NOTE: the name must NOT start with FIREBASE_ / X_GOOGLE_ / EXT_ —
+// those prefixes are reserved, and a .env containing one makes the
+// whole `firebase deploy --only functions` fail to load the file.
+// This is the Identity Toolkit (Firebase Web) API key: a public client
+// identifier, the same value shipped in the app, not a secret.
+const IDENTITY_TOOLKIT_API_KEY = process.env.IDENTITY_TOOLKIT_API_KEY;
 
 const ESP_AUTH_KEY = defineSecret("ESP_AUTH_KEY");
 
@@ -26,11 +31,20 @@ exports.createDeviceToken = onCall(async (request) => {
 
   const uid = request.auth.uid;
 
+  if (!IDENTITY_TOOLKIT_API_KEY) {
+    // Fail loudly and specifically: without this, the exchange below
+    // returns a confusing 400 and provisioning appears to fail for
+    // reasons unrelated to the actual misconfiguration.
+    console.error("IDENTITY_TOOLKIT_API_KEY is not set — check functions/.env");
+    throw new HttpsError("failed-precondition", "Server not configured");
+  }
+
   try {
     const customToken = await admin.auth().createCustomToken(uid);
 
     const url =
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${FIREBASE_API_KEY}`;
+      "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken" +
+      `?key=${IDENTITY_TOOLKIT_API_KEY}`;
 
     const resp = await fetch(url, {
       method: "POST",

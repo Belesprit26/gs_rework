@@ -15,6 +15,7 @@ import '../presentation/auth/auth_gate/auth_gate_cubit.dart';
 import '../presentation/auth/login/login_bloc.dart';
 import '../presentation/auth/sign_up/sign_up_bloc.dart';
 import '../presentation/ble/ble_connection_cubit.dart';
+import '../domain/remote_config/repositories/remote_config_repository.dart';
 import '../presentation/device/device_registry_cubit.dart';
 import '../presentation/geyser/geyser_control_cubit.dart';
 import '../presentation/notifications/notification_service.dart';
@@ -75,6 +76,7 @@ void registerPresentation(GetIt getIt) {
       return DeviceStatsCubit(
         rtdbRepository: getIt<RtdbRepository>(),
         configRepository: getIt<GeyserConfigRepository>(),
+        remoteConfigRepository: getIt<RemoteConfigRepository>(),
         firebaseAuth: getIt<FirebaseAuth>(),
         deviceId: rtdbId ?? 'g1',
       );

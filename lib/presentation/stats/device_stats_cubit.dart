@@ -8,6 +8,7 @@ import '../../data/firebase/config/geyser_config_repository.dart';
 import '../../domain/geyser/entities/daily_stats.dart';
 import '../../domain/geyser/entities/geyser_config.dart';
 import '../../domain/geyser/repositories/rtdb_repository.dart';
+import '../../domain/remote_config/repositories/remote_config_repository.dart';
 
 part 'device_stats_state.dart';
 
@@ -15,10 +16,12 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
   DeviceStatsCubit({
     required RtdbRepository rtdbRepository,
     required GeyserConfigRepository configRepository,
+    required RemoteConfigRepository remoteConfigRepository,
     required FirebaseAuth firebaseAuth,
     required String deviceId,
   })  : _rtdb = rtdbRepository,
         _config = configRepository,
+        _remoteConfig = remoteConfigRepository,
         _deviceId = deviceId,
         super(const DeviceStatsState()) {
     _authSub = firebaseAuth.authStateChanges().listen(_onAuthChanged);
@@ -26,13 +29,26 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
 
   final RtdbRepository _rtdb;
   final GeyserConfigRepository _config;
+  final RemoteConfigRepository _remoteConfig;
   String _deviceId;
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<DailyStats>? _statsSub;
   StreamSubscription<GeyserConfig>? _configSub;
+  Timer? _elapsedTimer;
   String _currentDate = '';
   bool _activated = false;
+
+  /// Fraction of today elapsed so far — the savings maths is pro-rated
+  /// by it, so it is refreshed periodically and whenever stats arrive.
+  static double _elapsedHoursToday() {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final hours = now.difference(startOfDay).inSeconds / 3600.0;
+    // Never zero: a reading at 00:00:30 would otherwise divide the
+    // baseline to nothing and show a wild percentage.
+    return hours.clamp(0.05, 24.0).toDouble();
+  }
 
   void _onAuthChanged(User? user) {
     if (isClosed) return;
@@ -49,6 +65,8 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
 
   Future<void> _activate() async {
     _startConfigStream();
+    _startElapsedTimer();
+    emit(state.copyWith(elapsedHoursToday: _elapsedHoursToday()));
 
     try {
       final boot = await _rtdb.getLastBoot(_deviceId);
@@ -63,7 +81,22 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
     _configSub?.cancel();
     _configSub = _config.watchConfig(_deviceId).listen((config) {
       if (isClosed) return;
-      emit(state.copyWith(config: config));
+      emit(state.copyWith(
+        config: config,
+        // Standing loss is per tank size, so it must follow the config.
+        standingLossKwhPerDay:
+            _remoteConfig.standingLossKwhPerDay(config.tankSize),
+      ));
+    });
+  }
+
+  /// Keep the elapsed-day fraction current so the savings figure grows
+  /// through the day even when no new stats arrive.
+  void _startElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (isClosed) return;
+      emit(state.copyWith(elapsedHoursToday: _elapsedHoursToday()));
     });
   }
 
@@ -76,7 +109,10 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
         _startStatsStream();
         return;
       }
-      emit(state.copyWith(stats: stats));
+      emit(state.copyWith(
+        stats: stats,
+        elapsedHoursToday: _elapsedHoursToday(),
+      ));
     });
   }
 
@@ -104,6 +140,7 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
 
   @override
   Future<void> close() async {
+    _elapsedTimer?.cancel();
     await _authSub?.cancel();
     await _statsSub?.cancel();
     await _configSub?.cancel();
