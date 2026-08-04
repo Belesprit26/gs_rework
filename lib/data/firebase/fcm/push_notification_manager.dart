@@ -106,9 +106,18 @@ class PushNotificationManager {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  bool _initializing = false;
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _messageOpenedSub;
+
+  AuthorizationStatus _authorizationStatus = AuthorizationStatus.notDetermined;
+
+  /// The OS notification permission as last observed. Note this only
+  /// governs whether alerts can be DISPLAYED — message delivery, the
+  /// in-app notification list and token registration all work without
+  /// it.
+  AuthorizationStatus get authorizationStatus => _authorizationStatus;
 
   /// Global navigator key — set on [MaterialApp] to allow navigation
   /// from notification taps outside the widget tree.
@@ -121,51 +130,106 @@ class PushNotificationManager {
   // ── Public API ────────────────────────────────────────────────────
 
   /// Call once from `main()` after Firebase.initializeApp and DI setup.
+  ///
+  /// The OS permission governs only whether alerts can be DISPLAYED.
+  /// Everything else here — token registration, the message handlers,
+  /// and bridging remote events into the local notification list — is
+  /// permission-independent and is wired up regardless of the answer.
+  /// Bailing out on a denial (as this used to) silently cost the user
+  /// their in-app event history and made the install unreachable by the
+  /// backend even for data-only messages.
   Future<void> initialize() async {
-    if (_initialized) return;
-    _initialized = true;
+    // Guard re-entry, but do NOT latch until the work succeeds: a
+    // transient failure must leave a later retry possible.
+    if (_initialized || _initializing) return;
+    _initializing = true;
 
-    FirebaseMessaging.onBackgroundMessage(
-        firebaseMessagingBackgroundHandler);
+    try {
+      FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler);
 
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+      // Read the current status WITHOUT prompting. The ask itself is
+      // deliberately not made here: at launch the user has no context
+      // for it, and on iOS the dialog is one-shot. It is made instead
+      // by NotificationPrimingSheet, once a geyser is set up and the
+      // value is obvious. Users who already granted are unaffected.
+      final settings = await _messaging.getNotificationSettings();
+      _authorizationStatus = settings.authorizationStatus;
 
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      debugLog('FCM', 'Notification permission denied by user');
-      return;
+      // Needed to display alerts; harmless when permission is absent.
+      await _setupLocalNotifications();
+
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      // Token registration is isolated: on iOS getToken can fail while
+      // the APNS token is still pending, and that must not prevent the
+      // handlers below from being attached.
+      try {
+        final token = await _messaging.getToken();
+        if (token != null) {
+          await _registerToken(token);
+        }
+      } catch (e) {
+        debugLog('FCM', 'Initial token fetch failed: $e');
+      }
+      _tokenRefreshSub = _messaging.onTokenRefresh.listen(_registerToken);
+
+      // _onForegroundMessage bridges the event into the local DB before
+      // it displays anything — that half needs no permission.
+      _foregroundSub = FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+
+      _messageOpenedSub =
+          FirebaseMessaging.onMessageOpenedApp.listen(_onNotificationTapped);
+
+      final initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage != null) {
+        _onNotificationTapped(initialMessage);
+      }
+
+      _initialized = true;
+      debugLog('FCM', 'Initialized — permission=$_authorizationStatus');
+    } finally {
+      _initializing = false;
     }
+  }
 
-    await _setupLocalNotifications();
-
-    await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    final token = await _messaging.getToken();
-    if (token != null) {
-      await _registerToken(token);
+  /// Show the OS permission prompt.
+  ///
+  /// Call only from a context where the user has just been told what
+  /// notifications are for — see [NotificationPrimingSheet]. On iOS the
+  /// system dialog appears at most once in the app's lifetime; after a
+  /// refusal this returns the existing status without prompting, and
+  /// system settings become the only route back.
+  Future<AuthorizationStatus> requestPermissionNow() async {
+    try {
+      final settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      _authorizationStatus = settings.authorizationStatus;
+      debugLog('FCM', 'Permission requested — result=$_authorizationStatus');
+    } catch (e) {
+      debugLog('FCM', 'Permission request failed: $e');
     }
+    return _authorizationStatus;
+  }
 
-    _tokenRefreshSub = _messaging.onTokenRefresh.listen(_registerToken);
-
-    _foregroundSub = FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-
-    _messageOpenedSub =
-        FirebaseMessaging.onMessageOpenedApp.listen(_onNotificationTapped);
-
-    final initialMessage = await _messaging.getInitialMessage();
-    if (initialMessage != null) {
-      _onNotificationTapped(initialMessage);
+  /// Re-read the OS permission without prompting. Call after the app
+  /// returns from the background so a change made in system settings is
+  /// reflected without a relaunch.
+  Future<AuthorizationStatus> refreshAuthorizationStatus() async {
+    try {
+      final settings = await _messaging.getNotificationSettings();
+      _authorizationStatus = settings.authorizationStatus;
+    } catch (e) {
+      debugLog('FCM', 'Permission status refresh failed: $e');
     }
-
-    debugLog('FCM',
-        'Initialized — permission=${settings.authorizationStatus}');
+    return _authorizationStatus;
   }
 
   /// Cancel all stream subscriptions. Safe to call even if not initialized.

@@ -4,6 +4,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/entities/scanned_device.dart';
+import '../notifications/notification_priming_sheet.dart';
 import '../provisioning/provisioning_sheet.dart';
 import 'ble_connection_cubit.dart';
 
@@ -31,12 +32,19 @@ class DeviceScanPage extends StatelessWidget {
             curr.isConnected,
         listener: (context, state) async {
           // Show the provisioning modal on first connection.
-          await showProvisioningSheet(context);
-          if (context.mounted) {
-            // Refresh device info after provisioning.
-            context.read<BleConnectionCubit>().refreshDeviceInfo();
-            Navigator.of(context).pop();
+          final provisioned = await showProvisioningSheet(context);
+          if (!context.mounted) return;
+
+          // Refresh device info after provisioning.
+          context.read<BleConnectionCubit>().refreshDeviceInfo();
+
+          // Ask about notifications here, with a geyser freshly set up,
+          // rather than cold at app launch — see the sheet's docs.
+          if (provisioned == true) {
+            await NotificationPrimingSheet.maybeShow(context);
+            if (!context.mounted) return;
           }
+          Navigator.of(context).pop();
         },
         builder: (context, state) {
           // ── Connected state: show paired device, not scan controls ─
@@ -76,10 +84,12 @@ class DeviceScanPage extends StatelessWidget {
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: () async {
-                    await showProvisioningSheet(context);
-                    if (context.mounted) {
-                      // Refresh device info after provisioning.
-                      context.read<BleConnectionCubit>().refreshDeviceInfo();
+                    final provisioned = await showProvisioningSheet(context);
+                    if (!context.mounted) return;
+                    // Refresh device info after provisioning.
+                    context.read<BleConnectionCubit>().refreshDeviceInfo();
+                    if (provisioned == true) {
+                      await NotificationPrimingSheet.maybeShow(context);
                     }
                   },
                   icon: const Icon(Icons.settings_outlined),

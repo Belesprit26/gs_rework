@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
@@ -20,6 +21,7 @@ import '../ble/device_scan_page.dart';
 import '../device/device_management_page.dart';
 import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
+import '../notifications/notification_priming_sheet.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
 import '../shared/widgets/geyser_focal_card.dart';
@@ -951,6 +953,7 @@ class _SettingsTabState extends State<_SettingsTab> {
               ),
         ),
         const SizedBox(height: 12),
+        const _SystemNotificationRow(),
         ListTile(
           leading: Icon(
             anyEnabled
@@ -1369,6 +1372,88 @@ String _formatDuration(int seconds) {
   if (h == 0) return '$m m';
   if (m == 0) return '$h h';
   return '$h h $m m';
+}
+
+// ── System notification permission row ────────────────────────────────
+//
+// Distinct from the per-type mute settings below it: this is the OS
+// permission, which the app cannot change directly. Without a row like
+// this a user who declined has no way back — on iOS the system dialog
+// never appears again, so device settings are the only route.
+
+class _SystemNotificationRow extends StatefulWidget {
+  const _SystemNotificationRow();
+
+  @override
+  State<_SystemNotificationRow> createState() => _SystemNotificationRowState();
+}
+
+class _SystemNotificationRowState extends State<_SystemNotificationRow>
+    with WidgetsBindingObserver {
+  AuthorizationStatus? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Picks up a change made in device settings without a relaunch.
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final status =
+        await getIt<PushNotificationManager>().refreshAuthorizationStatus();
+    if (mounted) setState(() => _status = status);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _status;
+    if (status == null) return const SizedBox.shrink();
+
+    final allowed = status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+
+    // Nothing to act on when they are already on — the per-type
+    // settings below cover the rest.
+    if (allowed) {
+      return ListTile(
+        leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+        title: const Text('Alerts allowed'),
+        subtitle: Text(
+          'Your device lets GeyserSwitch notify you',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+        ),
+      );
+    }
+
+    return ListTile(
+      leading: Icon(Icons.notifications_off_outlined, color: Colors.orange.shade700),
+      title: const Text('Alerts are switched off'),
+      subtitle: Text(
+        status == AuthorizationStatus.denied
+            ? 'Turn them on in device settings to hear about your geyser'
+            : 'Turn them on to hear about your geyser',
+        style: TextStyle(color: Colors.orange.shade800, fontSize: 13),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        await NotificationPrimingSheet.maybeShow(context);
+        await _refresh();
+      },
+    );
+  }
 }
 
 // ── Device clock lost banner ──────────────────────────────────────────
