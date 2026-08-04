@@ -63,6 +63,11 @@ The app's signature inversion, used consistently:
   not UI. It appears **once per screen at most**: the gauge, the
   savings thermometer, or the logo badge. Never as borders, never as
   decoration.
+- The **logo mark** draws the ramp as a **five-segment gradient arc,
+  open at the bottom, over the black G** (see `assets/` /
+  brand files). When the mark appears in-app, use that geometry —
+  don't re-invent the arc with different segment counts or add
+  elements (rings, droplets) around it.
 - Semantic colors (`save`, `warning`, `critical`) are separate from the
   accent and only carry meaning (state, alerts, errors).
 - Text hierarchy is `ink` → `inkSecondary` → `muted`. Hierarchy comes
@@ -109,13 +114,18 @@ the reference: calm, factual, reassuring without cheerleading.
 
 ## Applied: the auth screens
 
+Scope note: the dashboard/home is **fixed as shipped** — this language
+is applied to *new and reworked* screens, and the approved application
+so far is the login/sign-up flow.
+
 Reference mockup (tokens verbatim): the auth rework artifact. Spec:
 
 - Ground `neuBase`, no header band. Status bar → logo badge → title →
   subtitle → mode well → fields → (spacer) → CTA.
-- **Logo badge**: raised disc (~84) containing a grooved ring with the
-  7-segment ramp arc + teal droplet — the screen's single ramp moment.
-  Reuses the gauge's groove grammar (small `CustomPainter`).
+- **Logo badge**: soft raised disc (~96) carrying the **actual mark** —
+  the five-segment gradient arc over the G, at the logo's own geometry.
+  No extra ring; the arc is the circle. The screen's single ramp
+  moment. (Render from the brand SVG asset rather than repainting.)
 - **Mode well** replaces the toggle text-link: Sign in / Create account
   as a grooved two-lane track (active = deeper inset, bold teal). Makes
   sign-up an explicit lane.
