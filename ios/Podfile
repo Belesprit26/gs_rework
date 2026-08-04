@@ -39,5 +39,17 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Keep every pod at or above the Podfile's floor. Some pods declare
+    # a lower target and Xcode then refuses to link them against a
+    # module built for 14.0 (workmanager_apple is one), which fails the
+    # build with a deployment-target mismatch rather than anything
+    # obviously wrong in our own code.
+    target.build_configurations.each do |config|
+      current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f
+      if current < 14.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      end
+    end
   end
 end
