@@ -70,11 +70,21 @@ Future<void> main() async {
 
   // Sign-in reactivation: sign-out (dashboard_page) stops the
   // per-account services, and nothing else restarts them until app
-  // relaunch. Only a signed-out → signed-in transition triggers this
-  // (the initial auth event is skipped), so cold-start behavior is
-  // unchanged; start() is idempotent regardless.
-  User? lastAuthUser = FirebaseAuth.instance.currentUser;
+  // relaunch. Only a signed-out → signed-in transition triggers this;
+  // start() is idempotent regardless.
+  //
+  // The FIRST emission is skipped explicitly rather than compared
+  // against currentUser: Firebase restores a persisted session
+  // asynchronously, so currentUser is often still null here and a
+  // normal cold start would otherwise look like a fresh sign-in.
+  var seenInitialAuthEvent = false;
+  User? lastAuthUser;
   FirebaseAuth.instance.authStateChanges().listen((user) {
+    if (!seenInitialAuthEvent) {
+      seenInitialAuthEvent = true;
+      lastAuthUser = user;
+      return;
+    }
     final cameBack = user != null && lastAuthUser == null;
     lastAuthUser = user;
     if (!cameBack) return;
