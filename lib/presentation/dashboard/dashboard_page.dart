@@ -21,6 +21,7 @@ import '../ble/device_scan_page.dart';
 import '../device/device_management_page.dart';
 import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
+import '../auth/widgets/neu_auth_widgets.dart';
 import '../notifications/notification_priming_sheet.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
@@ -59,25 +60,32 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         title: BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
           builder: (context, regState) {
+            // The brand badge replaces the "GS Rework" wordmark — same
+            // widget as the auth screen, sized for the app bar.
             if (!regState.isMultiDevice) {
-              return const Text('GS Rework');
+              return const Align(
+                alignment: Alignment.centerLeft,
+                child: AuthLogoBadge(size: 38),
+              );
             }
             final device = regState.selectedDevice;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            return Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('GS Rework', style: TextStyle(fontSize: 16)),
+                const AuthLogoBadge(size: 38),
+                const SizedBox(width: 12),
                 Text(
                   device?.nickname ?? 'Geyser',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     color: Theme.of(context)
                         .colorScheme
                         .onSurface
-                        .withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w400,
+                        .withValues(alpha: 0.75),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

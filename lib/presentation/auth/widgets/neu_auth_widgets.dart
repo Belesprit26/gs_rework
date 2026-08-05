@@ -13,27 +13,37 @@ import '../../theme/app_colors.dart';
 // ── Logo badge ─────────────────────────────────────────────────────
 
 /// The brand mark (arc + G asset) on a soft raised plinth — the
-/// screen's single temperature-ramp moment.
+/// screen's single temperature-ramp moment. Sized 96 on the auth
+/// screen; pass a smaller [size] elsewhere (e.g. ~38 in the app bar)
+/// and the mark and shadows scale with it.
 class AuthLogoBadge extends StatelessWidget {
-  const AuthLogoBadge({super.key});
+  const AuthLogoBadge({super.key, this.size = 96});
+
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    // Proportions tuned at size 96 (mark 65 wide, shadows 7/18).
+    final markWidth = size * (65 / 96);
     return Container(
-      width: 96,
-      height: 96,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: AppColors.neuBase,
         shape: BoxShape.circle,
-        boxShadow: neuRaisedShadows(distance: 7, blur: 18),
+        boxShadow: neuRaisedShadows(
+          distance: size * (7 / 96),
+          blur: size * (18 / 96),
+        ),
       ),
       alignment: Alignment.center,
       child: Image.asset(
         'assets/logos/GS_EC1.png',
-        width: 58,
+        width: markWidth,
         // The mark must never distort; if the asset is missing in a dev
         // build, show nothing rather than a broken-image icon.
-        errorBuilder: (_, __, ___) => const SizedBox(width: 58, height: 50),
+        errorBuilder: (_, __, ___) =>
+            SizedBox(width: markWidth, height: markWidth * (50 / 58)),
       ),
     );
   }

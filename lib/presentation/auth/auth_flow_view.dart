@@ -89,7 +89,7 @@ class _AuthFlowViewState extends State<AuthFlowView> {
                       // own bottom-anchored CTA via an internal Spacer.
                       Expanded(
                         child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
+                          duration: const Duration(milliseconds: 100),
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeOutCubic,
                           layoutBuilder: (current, previous) => Stack(
