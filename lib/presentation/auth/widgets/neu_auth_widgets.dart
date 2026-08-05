@@ -12,19 +12,38 @@ import '../../theme/app_colors.dart';
 
 // ── Logo badge ─────────────────────────────────────────────────────
 
-/// The brand mark (arc + G asset) on a soft raised plinth — the
-/// screen's single temperature-ramp moment. Sized 96 on the auth
-/// screen; pass a smaller [size] elsewhere (e.g. ~38 in the app bar)
-/// and the mark and shadows scale with it.
+/// The brand mark (arc + G asset), optionally on a soft raised plinth.
+///
+/// The plinth's neu shadows only work over [AppColors.neuBase] — the
+/// white highlight needs the mid-tone ground to exist against. On
+/// white/`surface` contexts (the app bar), pass [plinth] false and the
+/// mark stands alone, exactly as the logo files present it on white:
+/// per DESIGN_LANGUAGE.md, depth belongs on the neu ground and stays
+/// off flat surfaces.
 class AuthLogoBadge extends StatelessWidget {
-  const AuthLogoBadge({super.key, this.size = 96});
+  const AuthLogoBadge({super.key, this.size = 96, this.plinth = true});
 
+  /// Overall diameter with a plinth; the mark's width without one.
   final double size;
+
+  /// Whether to draw the raised neuBase disc behind the mark.
+  final bool plinth;
 
   @override
   Widget build(BuildContext context) {
     // Proportions tuned at size 96 (mark 65 wide, shadows 7/18).
-    final markWidth = size * (65 / 96);
+    final markWidth = plinth ? size * (65 / 96) : size;
+    final mark = Image.asset(
+      'assets/logos/GS_EC1.png',
+      width: markWidth,
+      // The mark must never distort; if the asset is missing in a dev
+      // build, show nothing rather than a broken-image icon.
+      errorBuilder: (_, __, ___) =>
+          SizedBox(width: markWidth, height: markWidth * (50 / 58)),
+    );
+
+    if (!plinth) return mark;
+
     return Container(
       width: size,
       height: size,
@@ -37,14 +56,7 @@ class AuthLogoBadge extends StatelessWidget {
         ),
       ),
       alignment: Alignment.center,
-      child: Image.asset(
-        'assets/logos/GS_EC1.png',
-        width: markWidth,
-        // The mark must never distort; if the asset is missing in a dev
-        // build, show nothing rather than a broken-image icon.
-        errorBuilder: (_, __, ___) =>
-            SizedBox(width: markWidth, height: markWidth * (50 / 58)),
-      ),
+      child: mark,
     );
   }
 }

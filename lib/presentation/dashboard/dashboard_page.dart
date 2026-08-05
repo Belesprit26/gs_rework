@@ -64,18 +64,19 @@ class _DashboardPageState extends State<DashboardPage> {
         title: BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
           builder: (context, regState) {
             // The brand badge replaces the "GS Rework" wordmark — same
-            // widget as the auth screen, sized for the app bar.
+            // widget as the auth screen. No plinth here: the app bar is
+            // `surface`, and the neu disc only blends on the neu ground.
             if (!regState.isMultiDevice) {
               return const Align(
                 alignment: Alignment.centerLeft,
-                child: AuthLogoBadge(size: 38),
+                child: AuthLogoBadge(size: 42, plinth: false),
               );
             }
             final device = regState.selectedDevice;
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AuthLogoBadge(size: 38),
+                const AuthLogoBadge(size: 42, plinth: false),
                 const SizedBox(width: 12),
                 Text(
                   device?.nickname ?? 'Geyser',
