@@ -61,22 +61,25 @@ class _DashboardPageState extends State<DashboardPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
+        // The bar takes the neu ground so the badge's plinth blends
+        // exactly as it does on the auth screen — the soft-UI disc only
+        // melts into a background of its own color.
+        backgroundColor: AppColors.neuBase,
         title: BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
           builder: (context, regState) {
             // The brand badge replaces the "GS Rework" wordmark — same
-            // widget as the auth screen. No plinth here: the app bar is
-            // `surface`, and the neu disc only blends on the neu ground.
+            // widget as the auth screen, sized for the app bar.
             if (!regState.isMultiDevice) {
               return const Align(
                 alignment: Alignment.centerLeft,
-                child: AuthLogoBadge(size: 42, plinth: false),
+                child: AuthLogoBadge(size: 44),
               );
             }
             final device = regState.selectedDevice;
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AuthLogoBadge(size: 42, plinth: false),
+                const AuthLogoBadge(size: 44),
                 const SizedBox(width: 12),
                 Text(
                   device?.nickname ?? 'Geyser',
@@ -196,6 +199,15 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   late final PageController _pageController;
 
+  /// True while a programmatic animateToPage is running, so the
+  /// intermediate onPageChanged callbacks it fires don't get mistaken
+  /// for user swipes and re-drive selection through every page crossed.
+  bool _animating = false;
+
+  /// Set when a selection arrives while the PageView is detached (the
+  /// single→multi-device transition); consumed once it attaches.
+  int? _pendingPageSync;
+
   @override
   void initState() {
     super.initState();
@@ -210,20 +222,58 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   void _onPageChanged(int index) {
-    final registry = context.read<DeviceRegistryCubit>();
-    registry.selectDevice(index);
-
-    final device = registry.state.devices[index];
-    context.read<GeyserControlCubit>().switchDevice(device.rtdbDeviceId);
-    context.read<DeviceStatsCubit>().switchDevice(device.rtdbDeviceId);
+    // Ignore boundaries crossed during a programmatic animate — only a
+    // real user swipe should drive selection. Otherwise report it: the
+    // DeviceSelectionCoordinator fans it out to the stats + geyser
+    // cubits, so a swipe and a Settings switch take the same path.
+    if (_animating) return;
+    context.read<DeviceRegistryCubit>().selectDevice(index);
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
+    return BlocConsumer<DeviceRegistryCubit, DeviceRegistryState>(
+      // Follow selection changes made ELSEWHERE (e.g. the Settings
+      // switcher): move the PageView to match. Guarded against the
+      // swipe's own echo — animating to the page we're already on is a
+      // no-op we skip so we don't fight the user's drag.
+      listener: (context, regState) {
+        if (!_pageController.hasClients) {
+          // View not attached yet (still on the single-device layout
+          // when a 2nd device was added). Land there once it attaches.
+          _pendingPageSync = regState.selectedIndex;
+          return;
+        }
+        final current = _pageController.page?.round();
+        if (current != null && current != regState.selectedIndex) {
+          _animating = true;
+          _pageController
+              .animateToPage(
+                regState.selectedIndex,
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+              )
+              .whenComplete(() => _animating = false);
+        }
+      },
       builder: (context, regState) {
         if (!regState.isMultiDevice) {
           return const _SingleDeviceHome();
+        }
+
+        // Reconcile a selection that arrived while detached: jump the
+        // freshly-attached PageView onto it (instant, not animated —
+        // it's a correction, not a user action).
+        if (_pendingPageSync != null) {
+          final target = _pendingPageSync!;
+          _pendingPageSync = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_pageController.hasClients) return;
+            if (target < regState.devices.length &&
+                _pageController.page?.round() != target) {
+              _pageController.jumpToPage(target);
+            }
+          });
         }
 
         return Column(

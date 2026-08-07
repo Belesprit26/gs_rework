@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/debug/debug_log.dart';
 import '../../domain/ble/ble_connection_status.dart';
+import '../device/device_selection_coordinator.dart';
 import '../../domain/ble/repositories/ble_repository.dart';
 import '../../domain/geyser/entities/geyser_live.dart';
 import '../../domain/geyser/entities/geyser_settings.dart';
@@ -27,7 +28,8 @@ const _sentinel = Object();
 ///
 /// BLE always takes priority.  Remote mode activates as a fallback
 /// when BLE drops, and deactivates when BLE reconnects.
-class GeyserControlCubit extends Cubit<GeyserControlState> {
+class GeyserControlCubit extends Cubit<GeyserControlState>
+    implements DeviceScoped {
   GeyserControlCubit({
     required GeyserControlRepository geyserControlRepository,
     required BleRepository bleRepository,
@@ -225,6 +227,7 @@ class GeyserControlCubit extends Cubit<GeyserControlState> {
   /// Cancels existing RTDB subscriptions and re-subscribes with the
   /// new device ID.  BLE streams are unaffected — they are tied to
   /// the physically connected device (which may or may not be this one).
+  @override
   void switchDevice(String deviceId) {
     if (isClosed || _deviceId == deviceId) return;
     _liveSub?.cancel();

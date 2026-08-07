@@ -17,6 +17,7 @@ import '../presentation/auth/sign_up/sign_up_bloc.dart';
 import '../presentation/ble/ble_connection_cubit.dart';
 import '../domain/remote_config/repositories/remote_config_repository.dart';
 import '../presentation/device/device_registry_cubit.dart';
+import '../presentation/device/device_selection_coordinator.dart';
 import '../presentation/geyser/geyser_control_cubit.dart';
 import '../presentation/notifications/notification_service.dart';
 import '../presentation/provisioning/provisioning_cubit.dart';
@@ -41,15 +42,17 @@ void registerPresentation(GetIt getIt) {
   // The RTDB repository enables remote mode when BLE is disconnected.
   getIt.registerLazySingleton<GeyserControlCubit>(
     () {
-      final prefs = getIt<PrefsManager>();
-      final bleMac = prefs.pairedDeviceId;
-      final rtdbId = bleMac != null ? prefs.getRtdbDeviceId(bleMac) : null;
+      // Start on the registry's selected device (the single source of
+      // truth), so the construct-time id already matches what the
+      // coordinator will apply — no redundant first switch.
+      final deviceId =
+          getIt<DeviceRegistryCubit>().state.selectedRtdbId ?? 'g1';
 
       return GeyserControlCubit(
         geyserControlRepository: getIt<GeyserControlRepository>(),
         bleRepository: getIt<BleRepository>(),
         rtdbRepository: getIt<RtdbRepository>(),
-        deviceId: rtdbId ?? 'g1',
+        deviceId: deviceId,
       );
     },
   );
@@ -69,16 +72,16 @@ void registerPresentation(GetIt getIt) {
   // Device stats — singleton, streams daily stats + user config
   getIt.registerLazySingleton<DeviceStatsCubit>(
     () {
-      final prefs = getIt<PrefsManager>();
-      final bleMac = prefs.pairedDeviceId;
-      final rtdbId = bleMac != null ? prefs.getRtdbDeviceId(bleMac) : null;
+      // See GeyserControlCubit: start on the registry's selection.
+      final deviceId =
+          getIt<DeviceRegistryCubit>().state.selectedRtdbId ?? 'g1';
 
       return DeviceStatsCubit(
         rtdbRepository: getIt<RtdbRepository>(),
         configRepository: getIt<GeyserConfigRepository>(),
         remoteConfigRepository: getIt<RemoteConfigRepository>(),
         firebaseAuth: getIt<FirebaseAuth>(),
-        deviceId: rtdbId ?? 'g1',
+        deviceId: deviceId,
       );
     },
   );
@@ -86,6 +89,16 @@ void registerPresentation(GetIt getIt) {
   // Device registry — singleton, tracks all known devices + selection
   getIt.registerLazySingleton<DeviceRegistryCubit>(
     () => DeviceRegistryCubit(prefsManager: getIt<PrefsManager>()),
+  );
+
+  // Selection coordinator — fans registry selection out to the stats
+  // and geyser-control cubits. Started from main.dart.
+  getIt.registerLazySingleton<DeviceSelectionCoordinator>(
+    () => DeviceSelectionCoordinator(
+      registry: getIt<DeviceRegistryCubit>(),
+      geyserControl: getIt<GeyserControlCubit>(),
+      stats: getIt<DeviceStatsCubit>(),
+    ),
   );
 
   // Notification service — singleton, manages BLE event subscriptions

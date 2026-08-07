@@ -13,6 +13,7 @@ import 'data/sync/sync_orchestrator.dart';
 import 'data/sync/workmanager_config.dart';
 import 'data/telemetry/telemetry_recorder.dart';
 import 'di/locator.dart';
+import 'presentation/device/device_selection_coordinator.dart';
 import 'domain/notifications/repositories/notification_repository.dart';
 import 'domain/telemetry/repositories/telemetry_repository.dart';
 import 'presentation/geyser/geyser_control_cubit.dart';
@@ -67,6 +68,12 @@ Future<void> main() async {
 
   // Workmanager daily task for midnight sync.
   await _guardedStart('Workmanager', initializeWorkmanager);
+
+  // Device selection coordinator — fans the registry's selected device
+  // out to the stats and geyser-control cubits, so any screen that
+  // changes the selection stays in sync with the rest.
+  await _guardedStart('DeviceSelection',
+      () => getIt<DeviceSelectionCoordinator>().start());
 
   // Sign-in reactivation: sign-out (dashboard_page) stops the
   // per-account services, and nothing else restarts them until app
