@@ -8,11 +8,13 @@ import '../../data/firebase/config/geyser_config_repository.dart';
 import '../../domain/geyser/entities/daily_stats.dart';
 import '../../domain/geyser/entities/geyser_config.dart';
 import '../../domain/geyser/repositories/rtdb_repository.dart';
+import '../device/device_selection_coordinator.dart';
 import '../../domain/remote_config/repositories/remote_config_repository.dart';
 
 part 'device_stats_state.dart';
 
-class DeviceStatsCubit extends Cubit<DeviceStatsState> {
+class DeviceStatsCubit extends Cubit<DeviceStatsState>
+    implements DeviceScoped {
   DeviceStatsCubit({
     required RtdbRepository rtdbRepository,
     required GeyserConfigRepository configRepository,
@@ -39,6 +41,10 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
   String _currentDate = '';
   bool _activated = false;
 
+  /// Bumped on every (re)point so an in-flight getLastBoot from a
+  /// superseded device can't emit its result over the current one.
+  int _selectionGen = 0;
+
   /// Fraction of today elapsed so far — the savings maths is pro-rated
   /// by it, so it is refreshed periodically and whenever stats arrive.
   static double _elapsedHoursToday() {
@@ -64,17 +70,22 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
   }
 
   Future<void> _activate() async {
+    final gen = ++_selectionGen;
     _startConfigStream();
     _startElapsedTimer();
     emit(state.copyWith(elapsedHoursToday: _elapsedHoursToday()));
+    _startStatsStream();
+    await _loadLastBoot(gen);
+  }
 
+  /// Load the device's last-boot time, discarding the result if the
+  /// selection changed while the request was in flight.
+  Future<void> _loadLastBoot(int gen) async {
     try {
       final boot = await _rtdb.getLastBoot(_deviceId);
-      if (isClosed) return;
+      if (isClosed || gen != _selectionGen) return;
       emit(state.copyWith(lastBoot: boot));
     } catch (_) {}
-
-    _startStatsStream();
   }
 
   void _startConfigStream() {
@@ -116,20 +127,24 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState> {
     });
   }
 
-  /// Switch to a different device's stats (multi-device swipe).
-  void switchDevice(String deviceId) async {
-    if (isClosed) return;
+  /// Point at a different device's stats.
+  @override
+  void switchDevice(String deviceId) {
+    if (isClosed || _deviceId == deviceId) return;
     _deviceId = deviceId;
-    emit(state.copyWith(stats: const DailyStats(), lastBoot: null));
 
+    // The config + stats streams require an authenticated user —
+    // watchConfig throws synchronously otherwise, and that throw in a
+    // fire-and-forget call surfaces as a FATAL unhandled error. Before
+    // auth restores (the coordinator fans out at cold start, pre-auth),
+    // just record the id; _activate() starts the streams once signed in.
+    if (!_activated) return;
+
+    final gen = ++_selectionGen;
+    emit(state.copyWith(stats: const DailyStats(), lastBoot: null));
     _startConfigStream();
     _startStatsStream();
-
-    try {
-      final boot = await _rtdb.getLastBoot(_deviceId);
-      if (isClosed) return;
-      emit(state.copyWith(lastBoot: boot));
-    } catch (_) {}
+    _loadLastBoot(gen);
   }
 
   static String _today() {
