@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../../shared/widgets/neu/neu.dart';
 import '../../theme/app_colors.dart';
 
-/// Soft-UI building blocks for the auth screens, per DESIGN_LANGUAGE.md.
+/// Soft-UI building blocks for the auth screens, per documentation/DESIGN_LANGUAGE.md.
 ///
 /// Deliberately auth-scoped: the shared [AppTextField]/[PrimaryButton]
 /// are used by provisioning and other screens the user has signed off
@@ -12,43 +12,35 @@ import '../../theme/app_colors.dart';
 
 // ── Logo badge ─────────────────────────────────────────────────────
 
-/// The brand mark (arc + G asset), optionally on a soft raised plinth.
+/// The brand mark (arc + G asset) on a soft raised plinth.
 ///
-/// The plinth's neu shadows only work over [AppColors.neuBase] — the
-/// white highlight needs the mid-tone ground to exist against. On
-/// white/`surface` contexts (the app bar), pass [plinth] false and the
-/// mark stands alone, exactly as the logo files present it on white:
-/// per DESIGN_LANGUAGE.md, depth belongs on the neu ground and stays
-/// off flat surfaces.
+/// The soft-UI trick only blends when the disc is the SAME color as
+/// the ground it sits on — the shadows alone reveal the shape. On the
+/// auth screen that ground is [AppColors.neuBase] (the default); on
+/// the `surface`-white app bar, pass [plinthColor] `AppColors.surface`
+/// so the disc melts into the bar the same way.
 class AuthLogoBadge extends StatelessWidget {
-  const AuthLogoBadge({super.key, this.size = 96, this.plinth = true});
+  const AuthLogoBadge({
+    super.key,
+    this.size = 96,
+    this.plinthColor = AppColors.neuBase,
+  });
 
-  /// Overall diameter with a plinth; the mark's width without one.
+  /// Overall diameter of the plinth.
   final double size;
 
-  /// Whether to draw the raised neuBase disc behind the mark.
-  final bool plinth;
+  /// Must match the background the badge sits on.
+  final Color plinthColor;
 
   @override
   Widget build(BuildContext context) {
     // Proportions tuned at size 96 (mark 65 wide, shadows 7/18).
-    final markWidth = plinth ? size * (65 / 96) : size;
-    final mark = Image.asset(
-      'assets/logos/GS_EC1.png',
-      width: markWidth,
-      // The mark must never distort; if the asset is missing in a dev
-      // build, show nothing rather than a broken-image icon.
-      errorBuilder: (_, __, ___) =>
-          SizedBox(width: markWidth, height: markWidth * (50 / 58)),
-    );
-
-    if (!plinth) return mark;
-
+    final markWidth = size * (65 / 96);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.neuBase,
+        color: plinthColor,
         shape: BoxShape.circle,
         boxShadow: neuRaisedShadows(
           distance: size * (7 / 96),
@@ -56,7 +48,20 @@ class AuthLogoBadge extends StatelessWidget {
         ),
       ),
       alignment: Alignment.center,
-      child: mark,
+      child: Image.asset(
+        'assets/logos/GS_EC1.png',
+        width: markWidth,
+        // Fail loudly in debug — a silently empty plinth is impossible
+        // to tell apart from a stale build. (Adding an asset needs a
+        // full rebuild + reinstall; hot reload will not pick it up.)
+        errorBuilder: (_, error, __) {
+          assert(() {
+            debugPrint('[Logo] assets/logos/GS_EC1.png failed to load: $error');
+            return true;
+          }());
+          return SizedBox(width: markWidth, height: markWidth * (50 / 58));
+        },
+      ),
     );
   }
 }

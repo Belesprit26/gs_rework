@@ -7,7 +7,7 @@ import 'widgets/neu_auth_widgets.dart';
 
 enum AuthMode { signIn, signUp }
 
-/// The auth screen, per DESIGN_LANGUAGE.md ("Applied: the auth
+/// The auth screen, per documentation/DESIGN_LANGUAGE.md ("Applied: the auth
 /// screens"): one `neuBase` surface edge to edge, the brand mark on a
 /// raised plinth as the single ramp moment, and the grooved mode well
 /// making sign-up an explicit lane. Depth budget: badge, mode well,
