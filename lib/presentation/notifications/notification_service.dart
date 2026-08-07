@@ -97,12 +97,12 @@ class NotificationService {
   }
 
   /// Refresh the unread count (call after dismissing or changing prefs).
+  ///
+  /// Pooled across every device — the badge matches the pooled list, and
+  /// no longer depends on a device being BLE-connected (the old
+  /// per-`_rtdbDeviceId` count read zero whenever nothing was paired).
   Future<void> refreshUnreadCount() async {
-    final deviceId = _rtdbDeviceId;
-    if (deviceId == null) return;
-
-    final count = await _notifications.countUndismissed(
-      deviceId,
+    final count = await _notifications.countAllUndismissed(
       enabledTypes: _prefs.enabledNotificationTypes,
     );
     _lastUnreadCount = count;

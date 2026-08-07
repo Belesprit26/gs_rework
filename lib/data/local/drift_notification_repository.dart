@@ -47,29 +47,25 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
-  Future<List<DeviceNotification>> getUndismissed(String deviceId) async {
+  Future<List<DeviceNotification>> getAllUndismissed({int? limit}) async {
     final query = _db.select(_db.notificationEntries)
-      ..where(
-        (t) => t.deviceId.equals(deviceId) & t.dismissed.equals(false),
-      )
+      ..where((t) => t.dismissed.equals(false))
       ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]);
+
+    if (limit != null) query.limit(limit);
 
     final rows = await query.get();
     return rows.map(_fromEntry).toList();
   }
 
   @override
-  Future<int> countUndismissed(
-    String deviceId, {
+  Future<int> countAllUndismissed({
     Set<NotificationType>? enabledTypes,
   }) async {
     final countExpr = _db.notificationEntries.id.count();
     final query = _db.selectOnly(_db.notificationEntries)
       ..addColumns([countExpr])
-      ..where(
-        _db.notificationEntries.deviceId.equals(deviceId) &
-            _db.notificationEntries.dismissed.equals(false),
-      );
+      ..where(_db.notificationEntries.dismissed.equals(false));
 
     if (enabledTypes != null && enabledTypes.isNotEmpty) {
       query.where(

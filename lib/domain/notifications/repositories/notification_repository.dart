@@ -14,15 +14,15 @@ abstract class NotificationRepository {
   /// All notifications for a device, newest first.
   Future<List<DeviceNotification>> getAll(String deviceId, {int? limit});
 
-  /// All non-dismissed notifications, newest first.
-  /// Unlike the old version this returns ALL types (muting is a UI concern).
-  Future<List<DeviceNotification>> getUndismissed(String deviceId);
+  /// All non-dismissed notifications across EVERY device, newest first.
+  /// Alerts are pooled — you want to see a problem on any geyser
+  /// regardless of which one you're currently viewing. Muting is a UI
+  /// concern, so all types are returned.
+  Future<List<DeviceNotification>> getAllUndismissed({int? limit});
 
-  /// Count undismissed notifications for badge, filtered to [enabledTypes].
-  Future<int> countUndismissed(
-    String deviceId, {
-    Set<NotificationType>? enabledTypes,
-  });
+  /// Pooled unread count across every device, for the app-bar badge,
+  /// filtered to [enabledTypes].
+  Future<int> countAllUndismissed({Set<NotificationType>? enabledTypes});
 
   /// Check if a matching event already exists (for FCM dedup).
   /// Matches on [deviceId], [type], and timestamp within [window].
