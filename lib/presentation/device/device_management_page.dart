@@ -353,13 +353,19 @@ class _MaxOnTimerSection extends StatelessWidget {
   /// very moment the next timer fires; ending early keeps every block
   /// boundary clean. Firmware ≥ 0.7.0 also guards against this, so the
   /// values are belt-and-braces rather than load-bearing.
+  // Whole-hour presets. The firmware (v0.7.0) suppresses a timer that
+  // would fire within 60 s of a run-limit cutoff, so a duration that
+  // exactly equals the gap between two timers is safe — the earlier
+  // ":58" values existed only to dodge that collision by hand and are
+  // no longer needed. Any 2-minute nicety is explained in a snackbar
+  // (see documentation/DEFERRED.md), not baked into confusing chip labels.
   static const _presets = [
     (label: 'Off', minutes: 0),
-    (label: '58 min', minutes: 58),
-    (label: '1 h 58 m', minutes: 118),
-    (label: '3 h 58 m', minutes: 238),
-    (label: '5 h 58 m', minutes: 358),
-    (label: '7 h 58 m', minutes: 478),
+    (label: '1 hour', minutes: 60),
+    (label: '2 hours', minutes: 120),
+    (label: '4 hours', minutes: 240),
+    (label: '6 hours', minutes: 360),
+    (label: '8 hours', minutes: 480),
   ];
 
   @override
@@ -452,21 +458,12 @@ class _MaxOnTimerSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Recommended: 3 h 58 m. Caps how long the geyser can '
+                      'Recommended: 4 hours. Caps how long the geyser can '
                       'draw power in one stretch. Your geyser\'s built-in '
                       'thermostat is unaffected.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade500,
                         fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Blocks end two minutes early so the next scheduled '
-                      'block starts cleanly.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
-                        fontSize: 11,
                       ),
                     ),
                   ],
