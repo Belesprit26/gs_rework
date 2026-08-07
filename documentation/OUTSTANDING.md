@@ -1,6 +1,6 @@
 # Outstanding work — MVP rollout
 
-Working checklist of everything not yet done, as of 2026-08-05.
+Working checklist of everything not yet done, as of 2026-08-08.
 Background and rationale live in `MVP_STABILIZATION_PLAN.md`; this file
 is the tracker.
 
@@ -20,11 +20,10 @@ development toolchain can substitute.
       on its own. This converts "the anti-brick setting is enabled"
       into "we have watched it save a unit". **No firmware may go out
       over the air before this passes.**
-- [ ] **iOS Xcode build + device install.** Highest-uncertainty area in
-      the project: an `import workmanager` vs `workmanager_apple`
-      mismatch survived an entire session of checks because nothing in
-      CI or the local toolchain compiles Swift. Assume more may be
-      hiding behind it.
+- [x] **iOS compiles** — `flutter build ios --no-codesign` succeeds
+      (fixed the `workmanager_apple` import and the 13.0→14.0 deployment
+      target). Remaining: a real **device install + on-device run**,
+      still the highest-uncertainty area since CI can't compile Swift.
 - [ ] **Field validation matrix** — 19 scenarios in
       `MVP_STABILIZATION_PLAN.md` §8. Highest value:
   - [ ] Fresh provisioning on a **real iPhone** (proves the MTU /
@@ -57,13 +56,15 @@ development toolchain can substitute.
       without upgrading. Also `firebase-functions` is flagged outdated
       with known breaking changes on upgrade. Do this well before the
       deadline, not during an incident.
-- [ ] **Remote Config standing-loss values** (optional): defaults ship
-      as 1.6 / 2.2 / 2.8 kWh per 24 h for 100/150/200 L tanks. Override
-      in the console once metered data exists — no app release needed.
+- [ ] **Remote Config standing-loss values** (optional): the Tier 1
+      savings model shipped with defaults 1.6 / 2.2 / 2.8 kWh per 24 h
+      for 100/150/200 L tanks. Override in the console once metered data
+      exists — no app release needed.
 
 **Already done:** RTDB rules deployed and verified (legacy fleet of 35
 households intact on `/GeyserSwitch/<uid>`); `createDeviceToken` and
-`onDeviceEvent` deployed.
+`onDeviceEvent` deployed; the Tier 1 standing-loss savings model shipped;
+both platforms build.
 
 ---
 
@@ -116,6 +117,21 @@ households intact on `/GeyserSwitch/<uid>`); `createDeviceToken` and
 
 ---
 
+## 4b. Tech debt & expansion (from the July release checklist)
+
+- [ ] **Security-rules emulator tests** — no automated coverage of the
+      Firestore/RTDB rules; pairs with the integration-test gap above.
+- [ ] **Hardcoded `TZ=SAST-2`** (`time_sync.c`) — schedules are wrong
+      outside South Africa. Make the timezone configurable if the
+      product ever ships beyond SA.
+- [ ] **Localisation (l10n)** — not set up; needed only for
+      multi-language markets.
+- [ ] **Split `dashboard_page.dart`** into smaller widgets — it has
+      grown large; a maintainability refactor, no behaviour change.
+- [ ] **Clean up legacy RTDB paths** in `firebase_auth_repository.dart`.
+
+---
+
 ## 5. Known-and-accepted risks (documented, not scheduled)
 
 - **This controller is not a safety device.** It switches mains
@@ -129,6 +145,11 @@ households intact on `/GeyserSwitch/<uid>`); `createDeviceToken` and
 - **Setup-mode first-claim**: an unprovisioned or factory-reset device
   is open to whoever claims it first. Keep the setup window short.
 - **Owner key is stored in SharedPreferences**, not secure storage.
+- **No battery-backed RTC** — after a power cut the clock is invalid
+  until NTP (needs WiFi) or a BLE time write. Functionally mitigated in
+  software by the interval fallback (firmware v0.7.0), which keeps
+  heating at the schedule's duty with no clock; a hardware RTC remains a
+  future option (see `HARDWARE_ROADMAP.md`).
 - **Legacy fleet constraints — do not violate:** Storage `firmware/**`
   must stay publicly readable (legacy ESP units download OTA
   unauthenticated), and the `sendNotification` /
