@@ -37,7 +37,7 @@
         "set": {
           "$did": {
             "on":    { ".validate": "newData.isBoolean()" },
-            "max":   { ".validate": "newData.isNumber() && newData.val() >= 51 && newData.val() <= 65" },
+            "max":   { ".validate": "newData.isNumber() && newData.val() >= 51 && newData.val() <= 70" },
             "min":   { ".validate": "newData.isNumber() && newData.val() >= 5 && newData.val() <= 50" },
             "ar":    { ".validate": "newData.isBoolean()" },
             "tmask": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 31" },

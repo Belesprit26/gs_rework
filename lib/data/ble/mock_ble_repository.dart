@@ -288,13 +288,13 @@ class MockBleRepository implements BleRepository {
     _tempSimTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       // Drift between -50 and +50 (i.e. ±0.50°C).
       final drift = rng.nextInt(101) - 50;
-      _mockTempRaw = (_mockTempRaw + drift).clamp(2000, 6500); // 20°C – 65°C
+      _mockTempRaw = (_mockTempRaw + drift).clamp(2000, 7000); // 20°C – 70°C
 
       // When geyser is on, bias upward; when off, bias downward.
       if (_mockGeyserState == 1) {
-        _mockTempRaw = (_mockTempRaw + 30).clamp(2000, 6500);
+        _mockTempRaw = (_mockTempRaw + 30).clamp(2000, 7000);
       } else {
-        _mockTempRaw = (_mockTempRaw - 15).clamp(2000, 6500);
+        _mockTempRaw = (_mockTempRaw - 15).clamp(2000, 7000);
       }
 
       final bd = ByteData(2)..setInt16(0, _mockTempRaw, Endian.little);

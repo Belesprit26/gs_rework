@@ -162,11 +162,56 @@ class PrefsManager {
     await _prefs.setString('$_kDeviceNickPrefix$rtdbDeviceId', nickname);
   }
 
+  // ── Heat mode (per device) ───────────────────────────────────────
+  //
+  // "Heat for a time" is an app-level preset over existing controls: it
+  // parks the temperature ceiling at its maximum and turns Auto-Reheat
+  // off, then leans on the user's timers + Max continuous run. We persist
+  // the mode plus the temperature-mode max / auto-reheat so switching back
+  // restores exactly what they had. Keyed by RTDB device id; wiped on
+  // device removal and sign-out.
+
+  static const _kHeatTimeModePrefix = 'heat_time_mode_';
+  static const _kHeatSavedMaxPrefix = 'heat_saved_max_';
+  static const _kHeatSavedArPrefix = 'heat_saved_ar_';
+
+  /// Whether this device is in "Heat for a time" mode (default: false —
+  /// "Heat to a temperature").
+  bool isTimeHeatMode(String rtdbDeviceId) =>
+      _prefs.getBool('$_kHeatTimeModePrefix$rtdbDeviceId') ?? false;
+
+  /// The temperature-mode max °C to restore when leaving time mode.
+  int? savedHeatMax(String rtdbDeviceId) =>
+      _prefs.getInt('$_kHeatSavedMaxPrefix$rtdbDeviceId');
+
+  /// The temperature-mode auto-reheat state to restore when leaving.
+  bool? savedHeatAutoReheat(String rtdbDeviceId) =>
+      _prefs.getBool('$_kHeatSavedArPrefix$rtdbDeviceId');
+
+  /// Enter time mode, remembering the temperature-mode limits to restore.
+  Future<void> enableTimeHeatMode(
+    String rtdbDeviceId, {
+    required int savedMax,
+    required bool savedAutoReheat,
+  }) async {
+    await _prefs.setBool('$_kHeatTimeModePrefix$rtdbDeviceId', true);
+    await _prefs.setInt('$_kHeatSavedMaxPrefix$rtdbDeviceId', savedMax);
+    await _prefs.setBool('$_kHeatSavedArPrefix$rtdbDeviceId', savedAutoReheat);
+  }
+
+  /// Leave time mode; the remembered limits are no longer needed.
+  Future<void> disableTimeHeatMode(String rtdbDeviceId) async {
+    await _prefs.remove('$_kHeatTimeModePrefix$rtdbDeviceId');
+    await _prefs.remove('$_kHeatSavedMaxPrefix$rtdbDeviceId');
+    await _prefs.remove('$_kHeatSavedArPrefix$rtdbDeviceId');
+  }
+
   /// Remove a device mapping and its nickname.
   Future<void> removeDevice(String bleMac, String rtdbDeviceId) async {
     final key = '$_kRtdbDidPrefix${_sanitiseMac(bleMac)}';
     await _prefs.remove(key);
     await _prefs.remove('$_kDeviceNickPrefix$rtdbDeviceId');
+    await disableTimeHeatMode(rtdbDeviceId);
   }
 
   // ── Sign-out cleanup ──────────────────────────────────────────────
@@ -183,7 +228,10 @@ class PrefsManager {
     final keysToRemove = _prefs.getKeys().where((k) =>
         k.startsWith(_kRtdbDidPrefix) ||
         k.startsWith(_kOwnerKeyPrefix) ||
-        k.startsWith(_kDeviceNickPrefix));
+        k.startsWith(_kDeviceNickPrefix) ||
+        k.startsWith(_kHeatTimeModePrefix) ||
+        k.startsWith(_kHeatSavedMaxPrefix) ||
+        k.startsWith(_kHeatSavedArPrefix));
     for (final key in keysToRemove.toList()) {
       await _prefs.remove(key);
     }

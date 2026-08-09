@@ -7,7 +7,6 @@ import '../../di/locator.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
-import '../geyser/geyser_control_cubit.dart';
 import 'device_registry_cubit.dart';
 
 /// Lists all registered GeyserSwitch devices with rename/remove
@@ -87,9 +86,6 @@ class DeviceManagementPage extends StatelessWidget {
                       ),
                     );
                   }),
-
-                  const SizedBox(height: 24),
-                  const _MaxOnTimerSection(),
                 ],
               );
             },
@@ -341,147 +337,3 @@ class _DeviceCard extends StatelessWidget {
 }
 
 enum _Action { rename, remove, resetKey }
-
-// ── Max continuous run timer ─────────────────────────────────────────
-
-class _MaxOnTimerSection extends StatelessWidget {
-  const _MaxOnTimerSection();
-
-  /// Durations stop two minutes short of the round hour on purpose.
-  /// A duration exactly equal to the gap between two scheduled slots
-  /// (2 h with timers at 04:00 and 06:00) would end one block at the
-  /// very moment the next timer fires; ending early keeps every block
-  /// boundary clean. Firmware ≥ 0.7.0 also guards against this, so the
-  /// values are belt-and-braces rather than load-bearing.
-  // Whole-hour presets. The firmware (v0.7.0) suppresses a timer that
-  // would fire within 60 s of a run-limit cutoff, so a duration that
-  // exactly equals the gap between two timers is safe — the earlier
-  // ":58" values existed only to dodge that collision by hand and are
-  // no longer needed. Any 2-minute nicety is explained in a snackbar
-  // (see documentation/DEFERRED.md), not baked into confusing chip labels.
-  static const _presets = [
-    (label: 'Off', minutes: 0),
-    (label: '1 hour', minutes: 60),
-    (label: '2 hours', minutes: 120),
-    (label: '4 hours', minutes: 240),
-    (label: '6 hours', minutes: 360),
-    (label: '8 hours', minutes: 480),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return BlocBuilder<GeyserControlCubit, GeyserControlState>(
-      buildWhen: (prev, curr) =>
-          prev.snapshot.maxOnMinutes != curr.snapshot.maxOnMinutes,
-      builder: (context, state) {
-        final current = state.snapshot.maxOnMinutes;
-        final label = _labelFor(current);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Energy & Runtime',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                )),
-            const SizedBox(height: 8),
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey.shade300),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.timer_off_outlined,
-                            size: 20, color: theme.colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text('Max Continuous Run',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              )),
-                        ),
-                        Text(label,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: current == 0
-                                  ? Colors.orange.shade700
-                                  : theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            )),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      current == 0
-                          ? 'Off — the geyser stays powered until a timer, '
-                              'your temperature limit, or you switch it off.'
-                          : 'Caps a single heating stretch at $label. '
-                              'Useful if the geyser is left on by accident.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'This is an energy guard, not a temperature control — '
-                      'your geyser\'s built-in thermostat regulates the '
-                      'water either way.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _presets.map((p) {
-                        final selected = p.minutes == current;
-                        return ChoiceChip(
-                          label: Text(p.label),
-                          selected: selected,
-                          onSelected: (_) {
-                            context
-                                .read<GeyserControlCubit>()
-                                .setMaxOnTimer(p.minutes);
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Recommended: 4 hours. Caps how long the geyser can '
-                      'draw power in one stretch. Your geyser\'s built-in '
-                      'thermostat is unaffected.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  String _labelFor(int minutes) {
-    if (minutes == 0) return 'Disabled';
-    if (minutes < 60) return '$minutes min';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    if (m == 0) return '$h hour${h > 1 ? 's' : ''}';
-    return '${h}h ${m}m';
-  }
-}

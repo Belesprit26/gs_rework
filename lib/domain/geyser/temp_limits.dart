@@ -9,7 +9,11 @@ library;
 const int tempMinFloor = 5;
 const int tempMinCeil = 50;
 const int tempMaxFloor = 51;
-const int tempMaxCeil = 65;
+
+/// Upper clamp for the max setpoint. Set to the top of the usual factory
+/// thermostat range (70 °C) — mirrors the firmware's `TEMP_MAX_CEIL` and
+/// the RTDB `set/$did/max` validation, which must move in lockstep.
+const int tempMaxCeil = 70;
 
 /// Minimum gap (°C) enforced between min and max. Prevents rapid
 /// ON/OFF relay cycling when auto-reheat is enabled and the two limits

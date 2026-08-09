@@ -23,7 +23,7 @@ void main() {
     });
 
     test('clamps max above ceiling', () {
-      expect(clampTempLimits(min: 30, max: 80), (min: 30, max: 65));
+      expect(clampTempLimits(min: 30, max: 80), (min: 30, max: 70));
     });
 
     test('enforces deadband by raising max (the chatter case)', () {
@@ -32,7 +32,7 @@ void main() {
     });
 
     test('deadband respects max ceiling', () {
-      // min at its ceiling: max rises to min+5=55, well under 65.
+      // min at its ceiling: max rises to min+5=55, well under 70.
       expect(clampTempLimits(min: 50, max: 52), (min: 50, max: 55));
     });
 

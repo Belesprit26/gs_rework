@@ -1,34 +1,27 @@
 import 'dart:async';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
-import '../../data/firebase/config/geyser_config_repository.dart';
-import '../../data/firebase/fcm/push_notification_manager.dart';
 import '../../data/local/prefs_manager.dart';
-import '../../data/telemetry/telemetry_recorder.dart';
 import '../../di/locator.dart';
-import '../../domain/auth/usecases/sign_out.dart';
-import '../../domain/notifications/repositories/notification_repository.dart';
-import '../../domain/telemetry/repositories/telemetry_repository.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
-import '../../domain/notifications/entities/device_notification.dart';
+import '../../domain/geyser/temp_limits.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
-import '../device/device_management_page.dart';
 import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../auth/widgets/neu_auth_widgets.dart';
-import '../notifications/notification_priming_sheet.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
+import '../settings/settings_tab.dart';
 import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/neu/neu.dart';
 import '../shared/widgets/neu/neu_bottom_nav.dart';
 import '../shared/widgets/neu/neu_slider.dart';
+import '../shared/widgets/run_limit_chips.dart';
 import '../stats/device_stats_cubit.dart';
 import '../theme/app_colors.dart';
 import '../../domain/geyser/timer_presets.dart';
@@ -96,13 +89,9 @@ class _DashboardPageState extends State<DashboardPage> {
             );
           },
         ),
-        actions: [
-          const _NotificationBell(),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Sign out',
-            onPressed: () => _confirmSignOut(context),
-          ),
+        actions: const [
+          _NotificationBell(),
+          SizedBox(width: 4),
         ],
       ),
       body: IndexedStack(
@@ -110,7 +99,7 @@ class _DashboardPageState extends State<DashboardPage> {
         children: const [
           _HomeTab(),
           _UsageTab(),
-          _SettingsTab(),
+          SettingsTab(),
         ],
       ),
       bottomNavigationBar: NeuBottomNav(
@@ -137,53 +126,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Future<void> _confirmSignOut(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Sign out'),
-        content: const Text('Are you sure you want to sign out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    // Grab context-dependent cubits before any awaits — the page can be
-    // disposed mid-teardown once auth state starts changing, and reading
-    // a deactivated context throws.
-    final bleCubit = context.read<BleConnectionCubit>();
-    final registryCubit = context.read<DeviceRegistryCubit>();
-
-    // Tear down singletons that hold streams/subscriptions before
-    // Firebase Auth signs out.  This prevents them from operating
-    // on a signed-out auth context.
-    await getIt<TelemetryRecorder>().stop();
-    await getIt<NotificationService>().stop();
-    await getIt<GeyserControlCubit>().resetForSignOut();
-    bleCubit.unpair();
-    registryCubit.clear();
-    await getIt<PrefsManager>().clearDeviceData();
-
-    // Account data hygiene. The Drift rows carry no uid — anything
-    // left behind would be uploaded into the NEXT signer's cloud
-    // account. And without deleting the FCM token, this phone keeps
-    // receiving the signed-out account's geyser alerts indefinitely.
-    await getIt<TelemetryRepository>().deleteAll();
-    await getIt<NotificationRepository>().deleteAll();
-    await getIt<PushNotificationManager>().unregisterToken();
-
-    await getIt<SignOut>().call();
-  }
 }
 
 
@@ -346,6 +288,10 @@ class _SingleDeviceHome extends StatelessWidget {
       },
       builder: (context, state) {
         final snap = state.snapshot;
+        final deviceId =
+            context.read<DeviceRegistryCubit>().state.selectedRtdbId;
+        final isTimeMode = deviceId != null &&
+            getIt<PrefsManager>().isTimeHeatMode(deviceId);
 
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -379,6 +325,7 @@ class _SingleDeviceHome extends StatelessWidget {
             const SizedBox(height: 14),
             _AtAGlanceGrid(
               snapshot: snap,
+              isTimeMode: isTimeMode,
               onOpenTimers: () => _showTimerSettingsDialog(context, snap),
               // Always tappable: limits are only PAUSED while the sensor
               // is offline, and the user may well want to set them up
@@ -546,9 +493,28 @@ class _SingleDeviceHome extends StatelessWidget {
 
   void _showTempLimitsDialog(BuildContext context, GeyserSnapshot snap) {
     final cubit = context.read<GeyserControlCubit>();
+    final prefs = getIt<PrefsManager>();
+    final deviceId = context.read<DeviceRegistryCubit>().state.selectedRtdbId;
+
+    // Everything is staged locally and written only on Save, so Cancel is
+    // honest for the run-limit chips too (unlike the always-live chips in
+    // Settings).
     var min = snap.minTemp;
     var max = snap.maxTemp;
     var autoReheat = snap.autoReheat;
+    var maxOn = snap.maxOnMinutes;
+
+    // Open in whatever mode this device was last left in. In time mode the
+    // device holds the parked ceiling / auto-reheat-off values; show the
+    // user's remembered temperature-mode limits on the sliders instead, so
+    // flipping back to "Heat to a temperature" restores what they had.
+    var timeMode = false;
+    if (deviceId != null && prefs.isTimeHeatMode(deviceId)) {
+      timeMode = true;
+      max = prefs.savedHeatMax(deviceId) ?? snap.maxTemp;
+      autoReheat = prefs.savedHeatAutoReheat(deviceId) ?? snap.autoReheat;
+    }
+    final startedInTime = timeMode;
 
     showDialog(
       context: context,
@@ -561,7 +527,7 @@ class _SingleDeviceHome extends StatelessWidget {
           ),
           title: Row(
             children: [
-              const Expanded(child: Text('Temperature Limits')),
+              const Expanded(child: Text('Temperature')),
               IconButton(
                 icon: const Icon(Icons.health_and_safety_outlined, size: 22),
                 tooltip: 'Water safety info',
@@ -569,104 +535,148 @@ class _SingleDeviceHome extends StatelessWidget {
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Reachable while the sensor is offline on purpose —
-              // limits are paused, not invalid, and can be set up ready
-              // for it recovering.
-              if (snap.isSensorOffline) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.sensors_off,
-                          size: 18, color: Colors.orange.shade700),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Sensor offline — these limits are paused and '
-                          'will resume automatically once it reconnects.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange.shade900,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _HeatModeToggle(
+                  timeMode: timeMode,
+                  onChanged: (v) => setDialogState(() => timeMode = v),
                 ),
-                const SizedBox(height: 12),
-              ],
-              // ── Min temp slider ────────────────────────────────
-              Row(
-                children: [
-                  const Expanded(child: Text('Min')),
-                  Text('$min°C'),
-                ],
-              ),
-              SliderTheme(
-                data: neuSliderTheme(ctx, accent: AppColors.primary),
-                child: Slider(
-                  min: 5,
-                  max: 50,
-                  divisions: 45,
-                  value: min.toDouble().clamp(5, 50),
-                  onChanged: (v) => setDialogState(() => min = v.round()),
-                ),
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 16),
 
-              // ── Max temp slider ────────────────────────────────
-              Row(
-                children: [
-                  const Expanded(child: Text('Max')),
-                  Text('$max°C'),
-                ],
-              ),
-              SliderTheme(
-                data: neuSliderTheme(ctx, accent: AppColors.rampOrange),
-                child: Slider(
-                  min: 51,
-                  max: 65,
-                  divisions: 14,
-                  value: max.toDouble().clamp(51, 65),
-                  onChanged: (v) => setDialogState(() => max = v.round()),
-                ),
-              ),
-              const Divider(height: 24),
-
-              // ── Auto-reheat toggle ─────────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                // Reachable while the sensor is offline on purpose — the
+                // ceiling is paused, not invalid, and can be set up ready
+                // for it recovering.
+                if (snap.isSensorOffline) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
                       children: [
-                        const Text('Auto-Reheat'),
-                        Text(
-                          autoReheat
-                              ? 'Geyser turns ON when temp drops to min'
-                              : 'You\'ll be alerted when temp drops to min',
-                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey.shade600,
-                              ),
+                        Icon(Icons.sensors_off,
+                            size: 18, color: Colors.orange.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Sensor offline — the temperature ceiling is '
+                            'paused and resumes automatically once it '
+                            'reconnects.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  NeuSwitch(
-                    value: autoReheat,
-                    onChanged: (v) =>
-                        setDialogState(() => autoReheat = v),
+                  const SizedBox(height: 12),
+                ],
+
+                if (!timeMode) ...[
+                  // ── Heat to a temperature ──────────────────────────
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Min')),
+                      Text('$min°C'),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: neuSliderTheme(ctx, accent: AppColors.primary),
+                    child: Slider(
+                      min: 5,
+                      max: 50,
+                      divisions: 45,
+                      value: min.toDouble().clamp(5, 50),
+                      onChanged: (v) => setDialogState(() => min = v.round()),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Max')),
+                      Text('$max°C'),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: neuSliderTheme(ctx, accent: AppColors.rampOrange),
+                    child: Slider(
+                      min: tempMaxFloor.toDouble(),
+                      max: tempMaxCeil.toDouble(),
+                      divisions: tempMaxCeil - tempMaxFloor,
+                      value:
+                          max.toDouble().clamp(tempMaxFloor, tempMaxCeil).toDouble(),
+                      onChanged: (v) => setDialogState(() => max = v.round()),
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Auto-Reheat'),
+                            Text(
+                              autoReheat
+                                  ? 'Geyser turns ON when temp drops to min'
+                                  : 'You\'ll be alerted when temp drops to min',
+                              style:
+                                  Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                        color: Colors.grey.shade600,
+                                      ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      NeuSwitch(
+                        value: autoReheat,
+                        onChanged: (v) => setDialogState(() => autoReheat = v),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // ── Heat for a time ────────────────────────────────
+                  Text(
+                    'Save the most with single-cycle heat-ups (Heat to a Temperature), or run a '
+                    'longer continuous session for long baths and a full '
+                    'house right here.',
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
+                  ),
+                  const SizedBox(height: 14),
+                  RunLimitChips(
+                    currentMinutes: maxOn,
+                    onSelect: (m) => setDialogState(() => maxOn = m),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 15, color: Colors.grey.shade500),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Starts from your timers (manual switch-on), and '
+                          'keeps running for the duration',
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             NeuButton(
@@ -676,13 +686,32 @@ class _SingleDeviceHome extends StatelessWidget {
             NeuButton(
               label: 'Save',
               primary: true,
-              onPressed: () {
-                cubit.setTempLimits(
-                  min: min,
-                  max: max,
-                  autoReheat: autoReheat,
-                );
-                Navigator.pop(ctx);
+              onPressed: () async {
+                if (timeMode) {
+                  // Remember the temperature-mode limits, then park the
+                  // ceiling at its max + auto-reheat off and lean on the
+                  // timers + run limit.
+                  if (deviceId != null) {
+                    await prefs.enableTimeHeatMode(
+                      deviceId,
+                      savedMax: max,
+                      savedAutoReheat: autoReheat,
+                    );
+                  }
+                  cubit.setTempLimits(
+                      min: min, max: tempMaxCeil, autoReheat: false);
+                  cubit.setMaxOnTimer(maxOn);
+                } else {
+                  if (deviceId != null && startedInTime) {
+                    await prefs.disableTimeHeatMode(deviceId);
+                  }
+                  cubit.setTempLimits(
+                    min: min,
+                    max: max,
+                    autoReheat: autoReheat,
+                  );
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
               },
             ),
           ],
@@ -986,442 +1015,6 @@ class _UsageTab extends StatelessWidget {
   }
 }
 
-// ── Settings tab ─────────────────────────────────────────────────────
-
-class _SettingsTab extends StatefulWidget {
-  const _SettingsTab();
-
-  @override
-  State<_SettingsTab> createState() => _SettingsTabState();
-}
-
-class _SettingsTabState extends State<_SettingsTab> {
-  @override
-  Widget build(BuildContext context) {
-    final prefs = getIt<PrefsManager>();
-    final anyEnabled = prefs.anyNotificationEnabled;
-    final theme = Theme.of(context);
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      children: [
-        Text(
-          'Settings',
-          style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-        const SizedBox(height: 12),
-        const _SystemNotificationRow(),
-        ListTile(
-          leading: Icon(
-            anyEnabled
-                ? Icons.notifications_outlined
-                : Icons.notifications_off_outlined,
-            color: anyEnabled ? null : Colors.grey,
-          ),
-          title: const Text('Notification Settings'),
-          subtitle: Text(
-            anyEnabled ? 'Some notifications enabled' : 'All notifications muted',
-            style: TextStyle(
-              color: anyEnabled ? null : Colors.grey.shade600,
-              fontSize: 13,
-            ),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () async {
-            await _showNotificationSettingsDialog(context);
-            setState(() {}); // Refresh after changes.
-          },
-        ),
-        const SizedBox(height: 20),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: const Text('Geyser Setup'),
-          subtitle: BlocBuilder<DeviceStatsCubit, DeviceStatsState>(
-            builder: (context, state) {
-              final c = state.config;
-              return Text(
-                '${c.tankSize}L · ${c.elementKw.toStringAsFixed(1)} kW · '
-                'R${c.costPerKwh.toStringAsFixed(2)}/kWh',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
-                ),
-              );
-            },
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showGeyserSetupDialog(context),
-        ),
-        const SizedBox(height: 20),
-        BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
-          builder: (context, regState) {
-            final count = regState.devices.length;
-            return ListTile(
-              leading: const Icon(Icons.devices_other_outlined),
-              title: const Text('Manage Devices'),
-              subtitle: Text(
-                count <= 1
-                    ? '1 device registered'
-                    : '$count devices registered',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context)
-                  .push(DeviceManagementPage.route()),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showGeyserSetupDialog(BuildContext context) async {
-    final configRepo = getIt<GeyserConfigRepository>();
-    final statsCubit = context.read<DeviceStatsCubit>();
-    final registry = context.read<DeviceRegistryCubit>();
-    var config = statsCubit.state.config;
-    final deviceId = registry.state.selectedRtdbId;
-
-    final rateController = TextEditingController(
-      text: config.costPerKwh.toStringAsFixed(2),
-    );
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final theme = Theme.of(ctx);
-          return AlertDialog(
-            title: const Text('Geyser Setup'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'All settings are saved per-device so '
-                    'each geyser can have its own configuration.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  DropdownButtonFormField<int>(
-                    initialValue: config.tankSize,
-                    decoration: const InputDecoration(
-                      labelText: 'Tank size',
-                      isDense: true,
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 100, child: Text('100 litres')),
-                      DropdownMenuItem(value: 150, child: Text('150 litres')),
-                      DropdownMenuItem(value: 200, child: Text('200 litres')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDialogState(() => config = config.copyWith(tankSize: v));
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 14),
-
-                  DropdownButtonFormField<double>(
-                    initialValue: config.elementKw,
-                    decoration: const InputDecoration(
-                      labelText: 'Element wattage',
-                      isDense: true,
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 2.0, child: Text('2.0 kW')),
-                      DropdownMenuItem(value: 2.5, child: Text('2.5 kW')),
-                      DropdownMenuItem(value: 3.0, child: Text('3.0 kW')),
-                      DropdownMenuItem(value: 4.0, child: Text('4.0 kW')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDialogState(() => config = config.copyWith(elementKw: v));
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 14),
-
-                  TextFormField(
-                    controller: rateController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Electricity rate (R/kWh)',
-                      prefixText: 'R ',
-                      isDense: true,
-                      helperText:
-                          'Eskom: ~R2.71 · City Power: ~R3.16\n'
-                          'Cape Town: ~R3.91 · Durban: ~R2.24',
-                      helperMaxLines: 2,
-                      helperStyle: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  DropdownButtonFormField<int>(
-                    initialValue: config.householdSize,
-                    decoration: const InputDecoration(
-                      labelText: 'Household size',
-                      isDense: true,
-                    ),
-                    items: List.generate(
-                      8,
-                      (i) => DropdownMenuItem(
-                        value: i + 1,
-                        child: Text('${i + 1} ${i == 0 ? 'person' : 'people'}'),
-                      ),
-                    ),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDialogState(
-                            () => config = config.copyWith(householdSize: v));
-                      }
-                    },
-                  ),
-
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline,
-                          size: 14, color: Colors.grey.shade400),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Most SA homes have a 150L geyser with a 3 kW '
-                          'element. Check the label on your geyser if unsure.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade500,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final parsed = double.tryParse(rateController.text);
-                  if (parsed != null && parsed > 0) {
-                    config = config.copyWith(costPerKwh: parsed);
-                  }
-                  if (deviceId != null) {
-                    await configRepo.saveConfig(deviceId, config);
-                  }
-                  if (ctx.mounted) Navigator.pop(ctx);
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    rateController.dispose();
-  }
-
-  Future<void> _showNotificationSettingsDialog(BuildContext context) async {
-    final prefs = getIt<PrefsManager>();
-
-    // Snapshot current state.
-    final toggles = {
-      for (final type in NotificationType.settable)
-        type: prefs.isNotificationTypeEnabled(type),
-    };
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Notification Settings'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Choose which notifications you want to receive. '
-                'Muted types still appear in the list but won\'t '
-                'count toward your badge or trigger alerts.',
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              for (final type in NotificationType.settable)
-                _NotificationTypeToggle(
-                  type: type,
-                  enabled: toggles[type] ?? true,
-                  onChanged: (enabled) {
-                    setDialogState(() => toggles[type] = enabled);
-                  },
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                for (final entry in toggles.entries) {
-                  await prefs.setNotificationTypeEnabled(
-                    entry.key,
-                    entry.value,
-                  );
-                }
-                // Refresh the badge count with new preferences.
-                getIt<NotificationService>().refreshUnreadCount();
-                if (ctx.mounted) Navigator.pop(ctx);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationTypeToggle extends StatelessWidget {
-  const _NotificationTypeToggle({
-    required this.type,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final NotificationType type;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            _iconForType(type),
-            size: 20,
-            color: enabled ? _colorForType(type) : Colors.grey,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  type.label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: enabled ? null : Colors.grey,
-                  ),
-                ),
-                Text(
-                  _descriptionForType(type),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          Switch(value: enabled, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-
-  Color _colorForType(NotificationType type) {
-    switch (type) {
-      case NotificationType.maxTempOff:
-        return Colors.red;
-      case NotificationType.minTempOn:
-        return Colors.green;
-      case NotificationType.minTempAlert:
-        return Colors.orange;
-      case NotificationType.sensorFail:
-        return Colors.orange;
-      case NotificationType.sensorRecover:
-        return Colors.teal;
-      case NotificationType.maxOnTimeout:
-        return Colors.deepOrange;
-      case NotificationType.clockLost:
-        return Colors.orange;
-      case NotificationType.scheduleRestored:
-        return Colors.teal;
-      case NotificationType.unknown:
-        return Colors.grey;
-    }
-  }
-
-  IconData _iconForType(NotificationType type) {
-    switch (type) {
-      case NotificationType.maxTempOff:
-        return Icons.thermostat;
-      case NotificationType.minTempOn:
-        return Icons.local_fire_department;
-      case NotificationType.minTempAlert:
-        return Icons.warning_amber_rounded;
-      case NotificationType.sensorFail:
-        return Icons.sensors_off;
-      case NotificationType.sensorRecover:
-        return Icons.sensors;
-      case NotificationType.maxOnTimeout:
-        return Icons.timer_off_outlined;
-      case NotificationType.clockLost:
-        return Icons.schedule_outlined;
-      case NotificationType.scheduleRestored:
-        return Icons.schedule;
-      case NotificationType.unknown:
-        return Icons.help_outline;
-    }
-  }
-
-  String _descriptionForType(NotificationType type) {
-    switch (type) {
-      case NotificationType.maxTempOff:
-        return 'When geyser auto-turns off at max temp';
-      case NotificationType.minTempOn:
-        return 'When geyser auto-turns on at min temp';
-      case NotificationType.minTempAlert:
-        return 'When temp drops to min (auto-reheat off)';
-      case NotificationType.sensorFail:
-        return 'When the temperature sensor stops responding';
-      case NotificationType.sensorRecover:
-        return 'When the temperature sensor comes back online';
-      case NotificationType.maxOnTimeout:
-        return 'When the geyser switches off after its max run time';
-      case NotificationType.clockLost:
-        return 'When the device loses its clock and pauses the schedule';
-      case NotificationType.scheduleRestored:
-        return 'When the clock is set again and the schedule resumes';
-      case NotificationType.unknown:
-        return 'Unknown event type';
-    }
-  }
-}
-
 /// Compact duration for run-time-remaining copy ("2 h 15 m", "45 m").
 String _formatDuration(int seconds) {
   if (seconds < 60) return '<1 m';
@@ -1431,88 +1024,6 @@ String _formatDuration(int seconds) {
   if (h == 0) return '$m m';
   if (m == 0) return '$h h';
   return '$h h $m m';
-}
-
-// ── System notification permission row ────────────────────────────────
-//
-// Distinct from the per-type mute settings below it: this is the OS
-// permission, which the app cannot change directly. Without a row like
-// this a user who declined has no way back — on iOS the system dialog
-// never appears again, so device settings are the only route.
-
-class _SystemNotificationRow extends StatefulWidget {
-  const _SystemNotificationRow();
-
-  @override
-  State<_SystemNotificationRow> createState() => _SystemNotificationRowState();
-}
-
-class _SystemNotificationRowState extends State<_SystemNotificationRow>
-    with WidgetsBindingObserver {
-  AuthorizationStatus? _status;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _refresh();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Picks up a change made in device settings without a relaunch.
-    if (state == AppLifecycleState.resumed) _refresh();
-  }
-
-  Future<void> _refresh() async {
-    final status =
-        await getIt<PushNotificationManager>().refreshAuthorizationStatus();
-    if (mounted) setState(() => _status = status);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final status = _status;
-    if (status == null) return const SizedBox.shrink();
-
-    final allowed = status == AuthorizationStatus.authorized ||
-        status == AuthorizationStatus.provisional;
-
-    // Nothing to act on when they are already on — the per-type
-    // settings below cover the rest.
-    if (allowed) {
-      return ListTile(
-        leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-        title: const Text('Alerts allowed'),
-        subtitle: Text(
-          'Your device lets GeyserSwitch notify you',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-        ),
-      );
-    }
-
-    return ListTile(
-      leading: Icon(Icons.notifications_off_outlined, color: Colors.orange.shade700),
-      title: const Text('Alerts are switched off'),
-      subtitle: Text(
-        status == AuthorizationStatus.denied
-            ? 'Turn them on in device settings to hear about your geyser'
-            : 'Turn them on to hear about your geyser',
-        style: TextStyle(color: Colors.orange.shade800, fontSize: 13),
-      ),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () async {
-        await NotificationPrimingSheet.maybeShow(context);
-        await _refresh();
-      },
-    );
-  }
 }
 
 // ── Device clock lost banner ──────────────────────────────────────────
@@ -2037,6 +1548,80 @@ class _PeriodSegmented extends StatelessWidget {
   }
 }
 
+/// The segmented "Heat to a temperature | Heat for a time" switch at the
+/// top of the temperature dialog. The active side is a teal pill, matching
+/// the run-limit chips shown below it in time mode.
+class _HeatModeToggle extends StatelessWidget {
+  const _HeatModeToggle({required this.timeMode, required this.onChanged});
+
+  final bool timeMode;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.hairline, width: 1.5),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _segment(
+                'Heat to a temperature',
+                active: !timeMode,
+                onTap: () => onChanged(false),
+              ),
+            ),
+            Expanded(
+              child: _segment(
+                'Heat for a time',
+                active: timeMode,
+                onTap: () => onChanged(true),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _segment(
+    String label, {
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: active ? null : onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: active ? Colors.white : AppColors.inkSecondary,
+              fontWeight: FontWeight.w600,
+              fontSize: 12.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── At a glance grid ──────────────────────────────────────────────────
 //
 // Four quick-status tiles. Next timer + temperature come from the geyser
@@ -2045,11 +1630,17 @@ class _PeriodSegmented extends StatelessWidget {
 class _AtAGlanceGrid extends StatelessWidget {
   const _AtAGlanceGrid({
     required this.snapshot,
+    this.isTimeMode = false,
     this.onOpenTimers,
     this.onOpenTempRange,
   });
 
   final GeyserSnapshot snapshot;
+
+  /// When the geyser is in "Heat for a time" mode the temperature tile
+  /// shows the run duration rather than a min–max band that no longer
+  /// governs it.
+  final bool isTimeMode;
 
   /// Opens the timer-settings dialog (Next timer tile).
   final VoidCallback? onOpenTimers;
@@ -2057,6 +1648,15 @@ class _AtAGlanceGrid extends StatelessWidget {
   /// Opens the temperature-limits dialog (Temperature tile). Null disables
   /// the tap — e.g. while the sensor is offline and limits are paused.
   final VoidCallback? onOpenTempRange;
+
+  /// "Timed · 2h" style label for the temperature tile in time mode.
+  String _timedTempValue(int minutes) {
+    if (minutes <= 0) return 'Timed';
+    if (minutes < 60) return 'Timed · ${minutes}m';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m == 0 ? 'Timed · ${h}h' : 'Timed · ${h}h ${m}m';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2082,11 +1682,14 @@ class _AtAGlanceGrid extends StatelessWidget {
       timerFootnote = 'Active timers: $activeCount';
     }
 
-    final tempValue =
-        '${snapshot.minTemp}°–${snapshot.maxTemp}°C';
+    final tempValue = isTimeMode
+        ? _timedTempValue(snapshot.maxOnMinutes)
+        : '${snapshot.minTemp}°–${snapshot.maxTemp}°C';
     final tempFootnote = snapshot.isSensorOffline
         ? 'Limits paused · sensor offline'
-        : (snapshot.autoReheat ? 'Auto-reheat on' : 'Auto-reheat off');
+        : isTimeMode
+            ? 'Heats for a set time'
+            : (snapshot.autoReheat ? 'Auto-reheat on' : 'Auto-reheat off');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
