@@ -30,6 +30,14 @@ explaining that a run-limit block ends ~2 minutes before the hour so
 the next scheduled block starts cleanly (the whole-hour presets hide
 the `:58` detail; the snackbar is where it gets said if needed).
 
+### About screen — legal & website links
+The About card (`settings_tab.dart` `_AboutSection`) currently shows
+only app + firmware versions. Add tappable **Terms**, **Privacy** and a
+**company/product website** row once those exist. Deferred because there
+is no `url_launcher` dependency yet and no destination URLs — both are
+needed before this is worth wiring. URLs to supply: product/company
+website **TBD**, Terms **TBD**, Privacy **TBD**.
+
 ---
 
 ## Low-impact known issues (correct-but-imperfect)
