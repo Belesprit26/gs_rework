@@ -101,16 +101,20 @@ Firebase deploy or a test-publish first.
       red; 10 s → wipe flashes then boots to white (setup).
 - [ ] OTA overlay (if built): cyan pulse during an update.
 
-## 9. Hardware — water-leak alert `(HW)`
+## 9. Water-leak alert
 
-- [ ] Bridge the probes → firmware fires `EVT_LEAK`: relay **cuts and
-      latches** OFF and does not auto-resume.
-- [ ] App shows a **critical** notification + a red dashboard banner + a
-      high-priority push (with the app closed).
-- [ ] LED shows the leak strobe (highest priority, overrides everything).
-- [ ] Clear the probes → `EVT_LEAK_CLEAR`; relay stays off until the user
-      turns it back on.
-- [ ] Debounce: a brief splash / condensation does **not** trigger a leak.
+- [ ] **Firmware `(HW)`:** bridge the probes (>2 s) → `EVT_LEAK` fires; the
+      relay cuts and **cannot be re-powered while wet** — try the schedule /
+      button / app, all refused. Confirm probe polarity (flip `LEAK_WET_LEVEL`
+      if inverted).
+- [ ] **Auto-release `(HW)`:** dry the probes (>10 s) → `EVT_LEAK_CLEAR`; the
+      lockout clears and normal control resumes (relay stays off until
+      schedule/user turns it on). *(If you switch to latch-until-user, test
+      that it stays off until an explicit user on instead.)*
+- [ ] **Debounce `(HW)`:** a brief splash / condensation does **not** trigger.
+- [ ] **App:** leak shows as a **critical, non-silenceable** notification
+      (live BLE when connected, FCM push otherwise). *(Dashboard banner +
+      high-priority FCM channel: still to build.)*
 
 ## 10. Core system scenarios
 

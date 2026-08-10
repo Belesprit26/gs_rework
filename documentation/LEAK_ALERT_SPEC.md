@@ -1,12 +1,10 @@
 # Water-leak alert — end-to-end spec
 
-Status: **app side implemented; firmware detection pending.** The leak sensor
-is board hardware (leak probes on GPIO22, `HARDWARE_ROADMAP.md`). A leak
-**alerts the phone** via the normal event pipeline — a live BLE notification
-when connected, an FCM push otherwise. By decision there is **no LED effect for
-a leak** (the status LED already carries enough states). The app rendering
-(`NotificationType.leak`/`leakClear`, critical styling, non-silenceable) is
-**done**; firmware detection + cut-and-latch is next.
+Status: **app + firmware implemented; app banner + FCM copy remain.** The leak
+sensor is on GPIO22. A leak alerts the phone (live BLE + FCM push), cuts power,
+and blocks re-power while wet. **No LED effect**, by decision. One firmware
+deviation from the plan needs a call — see the note in §1
+(block-while-wet vs latch-until-user).
 
 ## Principle
 
@@ -26,27 +24,31 @@ as a **critical** notification (a live BLE alert when connected, an FCM push
 otherwise). Two new event codes; everything else is existing pipeline. **No
 LED** — a leak is app-only by decision.
 
-## 1. Firmware (`gs_firmware`)
+## 1. Firmware (`gs_firmware`) — DONE
 
-- **New event codes** (`event_buffer.h`, next free after `0x08`):
-  `EVT_LEAK 0x09`, `EVT_LEAK_CLEAR 0x0A`; bump `EVT_TYPE_COUNT` to 10.
-- **Sensor read:** a GPIO input (probes bridged by water = active). Poll and
-  **debounce hard** — require sustained bridging (≈ 2–3 s) before firing, with
-  hysteresis before clear, so condensation/splash don't false-trigger. Mirror
-  the `button_task` poll + task-WDT pattern on **GPIO22** (`Leak_1` on the
-  board schematic).
-- **On leak (rising edge):** `device_state_set_relay(false)` and **latch** — do
-  not let the scheduler or auto-reheat switch it back on while a leak is active
-  — then `event_buffer_push_event(EVT_LEAK, temp)` and push over BLE + RTDB/FCM
-  (the same calls the temperature events use).
-- **On clear:** fire `EVT_LEAK_CLEAR`; the relay stays off until the **user**
-  turns it back on — do not auto-resume, a re-wetting probe shouldn't cycle the
-  element.
-- **Control decision to sign off:** auto-cut-and-latch is customer-impacting
-  (no hot water until cleared). Recommended for a leak, but consider a
-  per-device opt-out (like the interval-fallback opt-out) for installs where
-  probe placement is false-positive-prone. **The alert always fires regardless
-  of the opt-out.**
+- Event codes `EVT_LEAK 0x09` / `EVT_LEAK_CLEAR 0x0A` (`event_buffer.h`,
+  `EVT_TYPE_COUNT` → 10).
+- `leak.c` / `leak.h`: a debounced GPIO22 poll task (wet 2 s, dry 10 s;
+  active-low pull-up — **verify the probe polarity at bench**, flip
+  `LEAK_WET_LEVEL` if inverted). On a confirmed leak it fires `EVT_LEAK` via
+  the standard path (`event_buffer_push_event` + `gatt_server_notify_event` +
+  `firebase_rtdb_request_event_push`), and on confirmed-dry `EVT_LEAK_CLEAR`.
+  Wired in `main.c` (`leak_task`, GPIO22).
+- **Power lockout — single choke point:** a `leak_lockout` flag in
+  `device_state`; `device_state_set_relay(true)` is **refused** while it's set
+  (switching OFF is always allowed). One guard covers every path — a leak cuts
+  the relay and the scheduler, auto-reheat, button and remote all fail to
+  re-energise a wet geyser.
+
+> **Deviation to confirm.** The plan said "latch OFF until the *user* turns it
+> back on." What's built is **block-while-wet + auto-release on confirmed-dry**
+> (10 s): the lockout blocks all power-on while water is present, then clears
+> itself once the probes are dry, so normal control resumes (the relay still
+> stays OFF until the schedule / user / auto-reheat turns it on). This is
+> simpler and hard-blocks power while wet, but it does **not** wait for an
+> explicit user acknowledgement. The strict "latch until user" version needs
+> the user-on paths (button / BLE / remote) to clear the lockout — a
+> cross-cutting change better done once it can be compiled. Which do you want?
 
 ## 2. App (`gs_rework`) — DONE
 
@@ -77,7 +79,9 @@ BLE event characteristic, the 6-byte event struct, buffering, ack, and the
 
 ## Open decisions
 
-1. **Auto-cut + latch on leak** — agreed (recommended). Open: a per-device
+1. **Lockout semantics** — built as *block-while-wet + auto-release on
+   confirmed-dry* (§1). Confirm, or upgrade to *latch until the user turns it
+   back on* (needs the user-on paths to clear the lockout). Plus: a per-device
    opt-out for false-positive-prone installs?
 2. **Debounce window** (suggested ≈ 2–3 s bridged) and clear hysteresis.
 3. **Probe hardware** — GPIO22 is assigned on the board; the wet/dry threshold
