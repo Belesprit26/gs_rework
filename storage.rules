@@ -16,6 +16,18 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // ── Rework (gs_rework) firmware — token-gated, NOT public ───────
+    // Separate path from the legacy public one above. Rule-based read is
+    // DENIED; devices fetch the binary via a Firebase Storage download
+    // token baked into the RTDB manifest URL (the manifest itself requires
+    // auth to read), which bypasses this rule for legitimate devices while
+    // an unauthenticated party can't enumerate or download the firmware.
+    // Writes are publish-tooling only (Admin SDK / CI bypasses rules).
+    match /firmware_gs/{allPaths=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // ── Telemetry data (gs_rework) ──────────────────────────────────
     // Each user can only read/write their own telemetry folder.
     match /telemetry/{userId}/{allPaths=**} {
