@@ -1,10 +1,10 @@
 # Water-leak alert — end-to-end spec
 
-Status: **app + firmware implemented; app banner + FCM copy remain.** The leak
-sensor is on GPIO22. A leak alerts the phone (live BLE + FCM push), cuts power,
-and blocks re-power while wet. **No LED effect**, by decision. One firmware
-deviation from the plan needs a call — see the note in §1
-(block-while-wet vs latch-until-user).
+Status: **firmware done; app banner + FCM copy remain.** The leak sensor is on
+GPIO22. On a leak it alerts the phone (live BLE + FCM push), cuts power, and
+**latches** OFF against the schedule/auto-reheat — but the **user can override**
+(button/app) to resume normal running while it's still wet, and it **re-arms
+only after a confirmed dry**. **No LED effect**, by decision.
 
 ## Principle
 
@@ -26,29 +26,24 @@ LED** — a leak is app-only by decision.
 
 ## 1. Firmware (`gs_firmware`) — DONE
 
-- Event codes `EVT_LEAK 0x09` / `EVT_LEAK_CLEAR 0x0A` (`event_buffer.h`,
-  `EVT_TYPE_COUNT` → 10).
-- `leak.c` / `leak.h`: a debounced GPIO22 poll task (wet 2 s, dry 10 s;
-  active-low pull-up — **verify the probe polarity at bench**, flip
-  `LEAK_WET_LEVEL` if inverted). On a confirmed leak it fires `EVT_LEAK` via
-  the standard path (`event_buffer_push_event` + `gatt_server_notify_event` +
-  `firebase_rtdb_request_event_push`), and on confirmed-dry `EVT_LEAK_CLEAR`.
-  Wired in `main.c` (`leak_task`, GPIO22).
-- **Power lockout — single choke point:** a `leak_lockout` flag in
-  `device_state`; `device_state_set_relay(true)` is **refused** while it's set
-  (switching OFF is always allowed). One guard covers every path — a leak cuts
-  the relay and the scheduler, auto-reheat, button and remote all fail to
-  re-energise a wet geyser.
+State machine (per device), debounced GPIO22 (wet 2 s / dry 10 s; active-low
+pull-up — **verify polarity at bench**, flip `LEAK_WET_LEVEL` if inverted):
 
-> **Deviation to confirm.** The plan said "latch OFF until the *user* turns it
-> back on." What's built is **block-while-wet + auto-release on confirmed-dry**
-> (10 s): the lockout blocks all power-on while water is present, then clears
-> itself once the probes are dry, so normal control resumes (the relay still
-> stays OFF until the schedule / user / auto-reheat turns it on). This is
-> simpler and hard-blocks power while wet, but it does **not** wait for an
-> explicit user acknowledgement. The strict "latch until user" version needs
-> the user-on paths (button / BLE / remote) to clear the lockout — a
-> cross-cutting change better done once it can be compiled. Which do you want?
+- **DRY → LEAKING** (probes wet): fire `EVT_LEAK 0x09` **once** (buffer + BLE
+  notify + RTDB/FCM), cut the relay, set the latch. No repeats while wet.
+- **LEAKING → OVERRIDDEN** (user turns ON via button / BLE / remote): the latch
+  clears, full normal control resumes; still wet, no re-alert.
+- **→ DRY** (probes dry 10 s, from either state): fire `EVT_LEAK_CLEAR 0x0A`,
+  clear the latch, re-arm. Only then can a fresh wetting trigger again.
+
+The **latch** is a single choke point: a `leak_lockout` flag in `device_state`;
+`device_state_set_relay(true)` is refused while set (OFF always allowed), so the
+scheduler and auto-reheat can't re-energise a wet geyser. The **override** is
+`device_state_user_set_relay()` — the button / BLE / remote paths call it and it
+clears the latch on a user ON; the automatic paths stay on the guarded
+`set_relay()`. Codes added to `event_buffer.h` (`EVT_TYPE_COUNT` → 10); the task
+is wired in `main.c` (`leak_task`, GPIO22). Fires once per episode via
+`leak.c`'s debounce flag; `leak.c` itself needed no change for the override.
 
 ## 2. App (`gs_rework`) — DONE
 
@@ -60,10 +55,11 @@ LED** — a leak is app-only by decision.
 - **Not silenceable:** `leak` is excluded from `NotificationType.settable`, so
   it has no mute toggle and always alerts. `leakClear` stays mutable.
 
-Still to do (alongside the firmware step): a persistent **critical dashboard
-banner** while a leak is unacknowledged (follow the `_ClockLostBanner`
-pattern), and a **high-importance FCM channel** so the push lands with the app
-closed.
+Still to do: a persistent **critical dashboard banner** — "leak detected —
+sensor still wet" — while a leak is unresolved, with the wet state **derived
+app-side from the event pair** (an `EVT_LEAK` not yet followed by
+`EVT_LEAK_CLEAR`), following the `_ClockLostBanner` pattern; and a
+**high-importance FCM channel** so the push lands with the app closed.
 
 ## 3. Cloud function (`functions/index.js`)
 
@@ -79,10 +75,9 @@ BLE event characteristic, the 6-byte event struct, buffering, ack, and the
 
 ## Open decisions
 
-1. **Lockout semantics** — built as *block-while-wet + auto-release on
-   confirmed-dry* (§1). Confirm, or upgrade to *latch until the user turns it
-   back on* (needs the user-on paths to clear the lockout). Plus: a per-device
-   opt-out for false-positive-prone installs?
+1. **Lockout semantics** — resolved: latch + user-override + re-arm on
+   confirmed-dry (§1). Open only: a per-device opt-out for false-positive-prone
+   installs?
 2. **Debounce window** (suggested ≈ 2–3 s bridged) and clear hysteresis.
 3. **Probe hardware** — GPIO22 is assigned on the board; the wet/dry threshold
    and probe placement remain the hardware choice.

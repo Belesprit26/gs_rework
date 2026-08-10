@@ -103,18 +103,18 @@ Firebase deploy or a test-publish first.
 
 ## 9. Water-leak alert
 
-- [ ] **Firmware `(HW)`:** bridge the probes (>2 s) → `EVT_LEAK` fires; the
-      relay cuts and **cannot be re-powered while wet** — try the schedule /
-      button / app, all refused. Confirm probe polarity (flip `LEAK_WET_LEVEL`
-      if inverted).
-- [ ] **Auto-release `(HW)`:** dry the probes (>10 s) → `EVT_LEAK_CLEAR`; the
-      lockout clears and normal control resumes (relay stays off until
-      schedule/user turns it on). *(If you switch to latch-until-user, test
-      that it stays off until an explicit user on instead.)*
+- [ ] **Cut + latch `(HW)`:** bridge the probes (>2 s) → `EVT_LEAK` fires
+      **once**, relay cuts; the **schedule and auto-reheat can't re-power it**
+      (leave a timer due / temp below min → stays off). Confirm probe polarity
+      (flip `LEAK_WET_LEVEL` if inverted).
+- [ ] **User override `(HW)`:** while still wet, turn it on from the **button**
+      and from the **app** — both succeed and resume normal running; **no
+      repeat alert/cut** while it stays wet.
+- [ ] **Re-arm `(HW)`:** dry the probes (>10 s) → `EVT_LEAK_CLEAR`; re-wetting
+      now triggers a fresh alert/cut (it didn't while continuously wet).
 - [ ] **Debounce `(HW)`:** a brief splash / condensation does **not** trigger.
-- [ ] **App:** leak shows as a **critical, non-silenceable** notification
-      (live BLE when connected, FCM push otherwise). *(Dashboard banner +
-      high-priority FCM channel: still to build.)*
+- [ ] **App:** critical, non-silenceable notification (live BLE / FCM push);
+      once built, a "still wet" banner that clears on `EVT_LEAK_CLEAR`.
 
 ## 10. Core system scenarios
 
