@@ -35,6 +35,12 @@ enum NotificationType {
   /// Device clock recovered — normal schedule resumed.
   scheduleRestored(0x08, 'Schedule Resumed'),
 
+  /// Water leak detected near the geyser (critical, non-silenceable).
+  leak(0x09, 'Water Leak'),
+
+  /// A detected water leak has cleared.
+  leakClear(0x0A, 'Leak Cleared'),
+
   /// Unrecognised event code from firmware.
   unknown(0x00, 'Unknown Event');
 
@@ -54,9 +60,10 @@ enum NotificationType {
     );
   }
 
-  /// Only the types that correspond to real firmware events.
+  /// Types the user can mute. Excludes [unknown] and [leak] — a water-leak
+  /// alert is safety-critical and must not be silenceable.
   static List<NotificationType> get settable =>
-      values.where((t) => t != unknown).toList();
+      values.where((t) => t != unknown && t != leak).toList();
 }
 
 /// A single notification event from the geyser device.
@@ -125,6 +132,10 @@ class DeviceNotification extends Equatable {
       case NotificationType.scheduleRestored:
         return 'Device clock is set again — your schedule is running '
             'normally';
+      case NotificationType.leak:
+        return 'Water leak detected near the geyser — check it now';
+      case NotificationType.leakClear:
+        return 'Water leak cleared';
       case NotificationType.unknown:
         return 'Unknown event at $temperature°C';
     }

@@ -320,6 +320,10 @@ class _NotificationTile extends StatelessWidget {
         return Colors.orange;
       case NotificationType.scheduleRestored:
         return Colors.teal;
+      case NotificationType.leak:
+        return Colors.red;
+      case NotificationType.leakClear:
+        return Colors.teal;
       case NotificationType.unknown:
         return Colors.grey;
     }
@@ -343,6 +347,10 @@ class _NotificationTile extends StatelessWidget {
         return Icons.schedule_outlined;
       case NotificationType.scheduleRestored:
         return Icons.schedule;
+      case NotificationType.leak:
+        return Icons.water_damage;
+      case NotificationType.leakClear:
+        return Icons.check_circle_outline;
       case NotificationType.unknown:
         return Icons.help_outline;
     }

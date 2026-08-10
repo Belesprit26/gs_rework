@@ -1,11 +1,12 @@
 # Water-leak alert — end-to-end spec
 
-Status: **spec (not yet implemented).** The leak sensor is roadmap hardware
-(`HARDWARE_ROADMAP.md` Phase 1 — "Leak sensor triggers when water bridges
-probes"); there is no firmware or app code for it yet. A leak must be **loud on
-the device (LED) and on the phone (app)** — this spec defines the whole path so
-the two stay in lockstep, reusing the existing event/notification pipeline (no
-new transport).
+Status: **app side implemented; firmware detection pending.** The leak sensor
+is board hardware (leak probes on GPIO22, `HARDWARE_ROADMAP.md`). A leak
+**alerts the phone** via the normal event pipeline — a live BLE notification
+when connected, an FCM push otherwise. By decision there is **no LED effect for
+a leak** (the status LED already carries enough states). The app rendering
+(`NotificationType.leak`/`leakClear`, critical styling, non-silenceable) is
+**done**; firmware detection + cut-and-latch is next.
 
 ## Principle
 
@@ -21,8 +22,9 @@ so the copy must tell the user to close the supply / call a plumber.
 
 Detected on-device → fired as a firmware event → travels the **same** route as
 every other event (BLE notify + RTDB `events` + FCM push) → surfaced in the app
-as a **critical** notification + dashboard banner → and shown on the LED. Two
-new event codes; everything else is existing pipeline.
+as a **critical** notification (a live BLE alert when connected, an FCM push
+otherwise). Two new event codes; everything else is existing pipeline. **No
+LED** — a leak is app-only by decision.
 
 ## 1. Firmware (`gs_firmware`)
 
@@ -46,37 +48,26 @@ new event codes; everything else is existing pipeline.
   probe placement is false-positive-prone. **The alert always fires regardless
   of the opt-out.**
 
-## 2. App (`gs_rework`)
+## 2. App (`gs_rework`) — DONE
 
-- **New `NotificationType`s** (`device_notification.dart`, mirroring the codes):
-  `leak(0x09, 'Water Leak')`, `leakClear(0x0A, 'Leak Cleared')`.
-- **Styling** (`settings_tab.dart` `_iconForType` / `_colorForType` /
-  `_descriptionForType`): leak → `Icons.water_damage`, the **critical** colour
-  (`AppColors.critical`), description "Water detected near the geyser — power
-  cut. Check for a leak."
-- **Not silenceable.** Exclude `leak` from the mutable set (`NotificationType.
-  settable`) — a safety alert must not be toggle-off-able. `leakClear` can sit
-  with the normal, mutable set.
-- **Critical surfacing beyond the list:** don't let a leak be just one row on
-  the notifications page. Add a **persistent red dashboard banner** (follow the
-  `_ClockLostBanner` pattern in `dashboard_page.dart`) while a leak is
-  unacknowledged — "Water leak detected — power off. Check your geyser." — that
-  clears on `leakClear` or user acknowledgement.
-- **Push priority:** the leak FCM should use a **high-importance / critical**
-  channel so it alerts with the app closed, and should bypass the per-type mute
-  (it's non-silenceable).
+- `NotificationType.leak (0x09)` / `leakClear (0x0A)` added
+  (`device_notification.dart`) and rendered through all six `NotificationType`
+  switches (`device_notification.dart` body, `settings_tab.dart` +
+  `notifications_page.dart` colour/icon): leak → red + `Icons.water_damage`,
+  body "Water leak detected near the geyser — check it now".
+- **Not silenceable:** `leak` is excluded from `NotificationType.settable`, so
+  it has no mute toggle and always alerts. `leakClear` stays mutable.
+
+Still to do (alongside the firmware step): a persistent **critical dashboard
+banner** while a leak is unacknowledged (follow the `_ClockLostBanner`
+pattern), and a **high-importance FCM channel** so the push lands with the app
+closed.
 
 ## 3. Cloud function (`functions/index.js`)
 
 - `onDeviceEvent` maps event codes → push copy. Add `0x09` → title "Water leak
   detected", body "GeyserSwitch cut the power. Check your geyser and water
   supply." at high priority; `0x0A` → an optional, quieter "Leak cleared".
-
-## 4. LED (firmware)
-
-- Specced in `gs_firmware/LED_STATUS_SPEC.md`: leak is the **highest-priority
-  overlay** — a fast, unmistakable red/off strobe that overrides every other
-  state until `EVT_LEAK_CLEAR`.
 
 ## Nothing else changes
 
@@ -86,8 +77,8 @@ BLE event characteristic, the 6-byte event struct, buffering, ack, and the
 
 ## Open decisions
 
-1. **Auto-cut + latch on leak** (recommended) vs alert-only — and whether to
-   offer a per-device opt-out for false-positive-prone installs.
+1. **Auto-cut + latch on leak** — agreed (recommended). Open: a per-device
+   opt-out for false-positive-prone installs?
 2. **Debounce window** (suggested ≈ 2–3 s bridged) and clear hysteresis.
 3. **Probe hardware** — GPIO22 is assigned on the board; the wet/dry threshold
    and probe placement remain the hardware choice.

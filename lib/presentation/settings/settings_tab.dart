@@ -879,6 +879,10 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Colors.orange;
       case NotificationType.scheduleRestored:
         return Colors.teal;
+      case NotificationType.leak:
+        return Colors.red;
+      case NotificationType.leakClear:
+        return Colors.teal;
       case NotificationType.unknown:
         return Colors.grey;
     }
@@ -902,6 +906,10 @@ class _NotificationTypeToggle extends StatelessWidget {
         return Icons.schedule_outlined;
       case NotificationType.scheduleRestored:
         return Icons.schedule;
+      case NotificationType.leak:
+        return Icons.water_damage;
+      case NotificationType.leakClear:
+        return Icons.check_circle_outline;
       case NotificationType.unknown:
         return Icons.help_outline;
     }
@@ -925,6 +933,10 @@ class _NotificationTypeToggle extends StatelessWidget {
         return 'When the device loses its clock and pauses the schedule';
       case NotificationType.scheduleRestored:
         return 'When the clock is set again and the schedule resumes';
+      case NotificationType.leak:
+        return 'When water is detected near the geyser';
+      case NotificationType.leakClear:
+        return 'When a detected water leak clears';
       case NotificationType.unknown:
         return 'Unknown event type';
     }
