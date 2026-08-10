@@ -87,6 +87,9 @@ Firebase deploy or a test-publish first.
 
 ## 8. Hardware — RGB status LED `(HW)`
 
+- [ ] **First build:** `led.c` compiles — confirm the `led_strip` version
+      (2.x `.led_pixel_format` / `.led_model` vs 3.x `.color_component_format`)
+      and that its RMT channel allocates alongside the DS18B20 OneWire.
 - [ ] 3.3 V colour check: all states legible (white / blue / green / amber /
       red); if green/blue skew, calibrate the firmware white-balance.
 - [ ] Resting: unprovisioned = white; BLE connected = blue; cloud online =
