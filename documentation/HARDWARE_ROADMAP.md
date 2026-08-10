@@ -23,8 +23,8 @@ Last updated: 2026-03-08
 - [ ] D3 (green LED) lights when relay is ON, off when OFF
 - [ ] DS18B20 temperature sensor reads correctly
 - [ ] Thermostat auto-off at max temperature works
-- [ ] Leak sensor triggers when water bridges probes
-- [ ] RGB LED shows correct status colours
+- [ ] Leak sensor triggers when water bridges probes (alert path: `documentation/LEAK_ALERT_SPEC.md`)
+- [ ] RGB LED shows correct status colours (behaviour spec: `gs_firmware/LED_STATUS_SPEC.md`)
 - [ ] BLE advertising and connection stable
 - [ ] NVS stores and restores relay state across reboot
 - [ ] Factory reset (10s button hold) works
@@ -60,6 +60,7 @@ to test lab.
 | Update R4 BOM description | Was copy-pasted from leak sensor section |
 | Populate D1 (SMBJ5.0A) | Required for production surge protection |
 | Verify all protection components in BOM | F1, R2, D1, D2, D7, D8 |
+| Power D9 (WS2812B RGB) from 5V via a series diode on VDD (→ ~4.3V), or a level shifter on LED_1 | At 3.3V the WS2812B is dim/marginal; at 5V its data V_IH (~3.5V) exceeds the C6's 3.3V GPIO — the diode drop fixes both at once. Confirm R17's role on LED_1 (series damping is fine; a lone resistor can't level-shift). **3.3V for now** — colours calibrated in firmware (`gs_firmware/LED_STATUS_SPEC.md`) |
 
 ### PCB layout changes
 

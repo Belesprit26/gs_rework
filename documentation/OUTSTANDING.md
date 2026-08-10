@@ -96,11 +96,15 @@ both platforms build.
       (`kWh ≈ ΣΔT⁺ × litres × 4.186 / 3600`), ±10% instead of a
       standing-loss estimate. ~25 lines firmware, one additive RTDB
       field, rules line, app maths.
-- [ ] **Secure boot + flash encryption.** Runbook already written
-      (`SECURE_BOOT.md`). Until then: OTA images are unsigned (RTDB
-      manifest + sha256 is the trust root) and the WiFi PSK, Firebase
+- [ ] **OTA hardening (staged).** `SECURE_BOOT.md` now stages this
+      cheapest-first: **B0** (no eFuses) — lock `storage.rules`
+      `/firmware/**` to `read: if false` + tokenised download URLs, and
+      verify the manifest `sha256` on-device; **B1** — signed OTA images
+      via `SECURE_SIGNED_APPS_NO_SECURE_BOOT` (reversible, secures the
+      remote channel); **B2** — full Secure Boot v2 + Flash/NVS
+      encryption (irreversible, production, closes plaintext-secrets).
+      Until B1: OTA images are unsigned; until B2: WiFi PSK, Firebase
       refresh token and owner key sit in plaintext NVS.
-- [ ] **Signed OTA images** — pairs with the above.
 - [ ] **BLE / provisioning integration tests.** Still the largest
       coverage gap: the riskiest paths have no automated coverage and
       are only ever exercised by a human with a device. Needs a fake
