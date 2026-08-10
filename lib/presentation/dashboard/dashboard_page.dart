@@ -9,6 +9,7 @@ import '../../di/locator.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/geyser/temp_limits.dart';
+import '../../domain/notifications/repositories/notification_repository.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
 import '../device/device_registry_cubit.dart';
@@ -297,19 +298,13 @@ class _SingleDeviceHome extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
             if (bleState.isOwnerLocked) const _OwnerLockedBanner(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 46),
-              child: GeyserFocalCard(
-                name: geyserLabel,
-                isOn: snap.isOn,
-                temperature: snap.temperature,
-                isLoading: state.isLoading,
-                isBusy: state.isBusy,
-                onToggle: () =>
-                    context.read<GeyserControlCubit>().toggleGeyser(),
-                onSensorOfflineTap: () =>
-                    _showSensorOfflineInfo(context),
-              ),
+            _FocalWithAlertRail(
+              deviceId: deviceId,
+              name: geyserLabel,
+              snapshot: snap,
+              isLoading: state.isLoading,
+              isBusy: state.isBusy,
+              onSensorOfflineTap: () => _showSensorOfflineInfo(context),
             ),
             const SizedBox(height: 12),
 
@@ -1024,6 +1019,485 @@ String _formatDuration(int seconds) {
   if (h == 0) return '$m m';
   if (m == 0) return '$h h';
   return '$h h $m m';
+}
+
+// ── Focal card + hanging-alert rail ───────────────────────────────────
+//
+// Persistent hardware hazards hang in the 46 px gutter beside the focal
+// card — never inside it — as small neu badges, stacked top-down by
+// severity. Purely additive: the rail only occupies the gutter that was
+// already empty, so a device with nothing wrong renders exactly as before.
+//
+// Leak is the first (and, for now, only) badge. Its active state is
+// derived app-side from the event pair — an EVT_LEAK not yet followed by
+// EVT_LEAK_CLEAR (see NotificationRepository.hasActiveLeak) — and refreshes
+// on every NotificationService.changes tick, so a leak arriving by BLE or
+// FCM lights the rail without a manual reload.
+
+/// The leak's identity colour — the ramp's water blue.
+const Color _kLeakColor = AppColors.rampBlue;
+
+class _FocalWithAlertRail extends StatefulWidget {
+  const _FocalWithAlertRail({
+    required this.deviceId,
+    required this.name,
+    required this.snapshot,
+    required this.isLoading,
+    required this.isBusy,
+    required this.onSensorOfflineTap,
+  });
+
+  final String? deviceId;
+  final String name;
+  final GeyserSnapshot snapshot;
+  final bool isLoading;
+  final bool isBusy;
+  final VoidCallback onSensorOfflineTap;
+
+  @override
+  State<_FocalWithAlertRail> createState() => _FocalWithAlertRailState();
+}
+
+class _FocalWithAlertRailState extends State<_FocalWithAlertRail> {
+  late final NotificationService _service;
+  late final NotificationRepository _repo;
+  StreamSubscription<void>? _sub;
+
+  bool _leakActive = false;
+
+  /// Shown when the user taps the power toggle while a leak is latched —
+  /// the toggle is gated and this points them to the badge instead.
+  bool _showNudge = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _service = getIt<NotificationService>();
+    _repo = getIt<NotificationRepository>();
+    _sub = _service.changes.listen((_) => _refreshLeak());
+    _refreshLeak();
+  }
+
+  @override
+  void didUpdateWidget(_FocalWithAlertRail old) {
+    super.didUpdateWidget(old);
+    if (old.deviceId != widget.deviceId) {
+      _showNudge = false;
+      _refreshLeak();
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshLeak() async {
+    final id = widget.deviceId;
+    final active = id == null ? false : await _repo.hasActiveLeak(id);
+    if (!mounted || active == _leakActive) return;
+    setState(() {
+      _leakActive = active;
+      // A cleared leak drops any lingering gate nudge.
+      if (!active) _showNudge = false;
+    });
+  }
+
+  void _onTogglePressed() {
+    // Gate turning ON while a leak is latched: don't send the command,
+    // surface the nudge + let the badge draw the eye. Turning OFF (or
+    // acting once already overridden/on) always passes straight through.
+    if (_leakActive && !widget.snapshot.isOn) {
+      setState(() => _showNudge = true);
+      return;
+    }
+    context.read<GeyserControlCubit>().toggleGeyser();
+  }
+
+  void _openSheet() {
+    showLeakDetailSheet(
+      context,
+      canOverride: !widget.snapshot.isOn,
+      onOverride: () => context.read<GeyserControlCubit>().toggleGeyser(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 46,
+              child: _leakActive
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: Center(
+                        child: _LeakBadge(onTap: _openSheet),
+                      ),
+                    )
+                  : null,
+            ),
+            Expanded(
+              child: GeyserFocalCard(
+                name: widget.name,
+                isOn: widget.snapshot.isOn,
+                temperature: widget.snapshot.temperature,
+                isLoading: widget.isLoading,
+                isBusy: widget.isBusy,
+                onToggle: _onTogglePressed,
+                onSensorOfflineTap: widget.onSensorOfflineTap,
+              ),
+            ),
+            const SizedBox(width: 46),
+          ],
+        ),
+        // Only while still off — once it's on (e.g. after an override) the
+        // "before switching on" prompt is stale, so it hides until the
+        // geyser is off again.
+        if (_showNudge && _leakActive && !widget.snapshot.isOn)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(46, 12, 46, 0),
+            child: _LeakNudge(onReview: _openSheet),
+          ),
+      ],
+    );
+  }
+}
+
+/// The hanging leak badge: a 40 px neu circle with the blue drop and a
+/// tight blue halo that gently breathes. Tap opens the detail sheet.
+class _LeakBadge extends StatefulWidget {
+  const _LeakBadge({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_LeakBadge> createState() => _LeakBadgeState();
+}
+
+class _LeakBadgeState extends State<_LeakBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return Semantics(
+      button: true,
+      label: 'Water leak detected, critical. Tap for details.',
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (context, child) {
+            final t = reduce ? 0.5 : _pulse.value;
+            return Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.neuBase,
+                boxShadow: [
+                  ...neuRaisedShadows(distance: 3, blur: 7),
+                  BoxShadow(
+                    color: _kLeakColor.withValues(alpha: 0.28 + 0.22 * t),
+                    blurRadius: 7,
+                    spreadRadius: 0.5 + 0.5 * t,
+                  ),
+                ],
+              ),
+              child: child,
+            );
+          },
+          child: const Icon(Icons.water_drop, size: 20, color: _kLeakColor),
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline gate feedback shown under the card when a leak-latched toggle is
+/// tapped. Whole card is tappable to open the detail sheet.
+class _LeakNudge extends StatelessWidget {
+  const _LeakNudge({required this.onReview});
+
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onReview,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: neuRaisedShadows(distance: 4, blur: 12),
+          border: const Border(
+            left: BorderSide(color: _kLeakColor, width: 3),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.water_drop, size: 18, color: _kLeakColor),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Turned off after a water leak. Tap to review before '
+                'switching on.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.ink),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The leak detail sheet: what happened, why it matters, what to do, and
+/// (while still off) the deliberate override. Reached only by tapping the
+/// badge or the gate nudge — never by the casual power toggle.
+Future<void> showLeakDetailSheet(
+  BuildContext context, {
+  required bool canOverride,
+  required VoidCallback onOverride,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.paper,
+    showDragHandle: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 4, 22, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.neuBase,
+                      boxShadow: [
+                        ...neuRaisedShadows(distance: 4, blur: 10),
+                        BoxShadow(
+                          color: _kLeakColor.withValues(alpha: 0.32),
+                          blurRadius: 9,
+                          spreadRadius: 0.5,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.water_drop,
+                        size: 26, color: _kLeakColor),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          canOverride ? 'CRITICAL · STILL WET' : 'CRITICAL',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                            color: _kLeakColor,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Water leak detected',
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'GeyserSwitch sensed water near the geyser and cut the power '
+                'automatically. It stays off until you turn it back on — the '
+                'schedule and auto-reheat can’t re-energise it while it’s wet.',
+                style: TextStyle(
+                    fontSize: 14.5, height: 1.4, color: AppColors.inkSecondary),
+              ),
+              const SizedBox(height: 16),
+              _LeakSteps(),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: NeuButton(
+                      label: 'Dismiss',
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                    ),
+                  ),
+                  if (canOverride) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _LeakOverrideButton(
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                          onOverride();
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (canOverride) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Turning it back on resumes normal heating. The alert stays '
+                  'until the sensor reports dry.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _LeakSteps extends StatelessWidget {
+  static const _steps = <String>[
+    'Close the water supply to the geyser — the cut-off stops the element, '
+        'not the water.',
+    'Check for pooling and call a plumber if you find any.',
+    'Dry the sensor area — the alert clears on its own once it’s dry.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: neuRaisedShadows(distance: 3, blur: 8),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < _steps.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                border: i == 0
+                    ? null
+                    : const Border(
+                        top: BorderSide(color: AppColors.hairline),
+                      ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _kLeakColor,
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _steps[i],
+                      style: const TextStyle(
+                          fontSize: 13.5, height: 1.35, color: AppColors.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The blue filled override — kept visually distinct from [NeuButton] so
+/// the deliberate action reads as deliberate.
+class _LeakOverrideButton extends StatelessWidget {
+  const _LeakOverrideButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _kLeakColor,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: _kLeakColor.withValues(alpha: 0.35),
+              offset: const Offset(3, 3),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: const Text(
+          'Turn back on anyway',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+      ),
+    );
+  }
 }
 
 // ── Device clock lost banner ──────────────────────────────────────────

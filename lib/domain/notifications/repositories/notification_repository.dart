@@ -24,6 +24,14 @@ abstract class NotificationRepository {
   /// filtered to [enabledTypes].
   Future<int> countAllUndismissed({Set<NotificationType>? enabledTypes});
 
+  /// Whether [deviceId] has an unresolved water leak: its most recent
+  /// [NotificationType.leak] is not yet followed by a
+  /// [NotificationType.leakClear]. Derived from the event pair so it
+  /// survives app restarts and matches the firmware's latch. Independent
+  /// of dismissal — clearing the notification list must not clear the
+  /// hazard state.
+  Future<bool> hasActiveLeak(String deviceId);
+
   /// Check if a matching event already exists (for FCM dedup).
   /// Matches on [deviceId], [type], and timestamp within [window].
   Future<bool> hasMatchingEvent({

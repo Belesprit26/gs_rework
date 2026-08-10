@@ -113,8 +113,17 @@ Firebase deploy or a test-publish first.
 - [ ] **Re-arm `(HW)`:** dry the probes (>10 s) → `EVT_LEAK_CLEAR`; re-wetting
       now triggers a fresh alert/cut (it didn't while continuously wet).
 - [ ] **Debounce `(HW)`:** a brief splash / condensation does **not** trigger.
-- [ ] **App:** critical, non-silenceable notification (live BLE / FCM push);
-      once built, a "still wet" banner that clears on `EVT_LEAK_CLEAR`.
+- [ ] **App — badge:** a leak lights a **blue drop badge** in the focal-card
+      gutter; it clears on `EVT_LEAK_CLEAR`. Survives an app restart while
+      unresolved (derived from the event pair). Tapping opens the detail sheet
+      (context + steps + override).
+- [ ] **App — gated toggle:** while latched, tapping the focal-card power
+      toggle does **not** turn it on — an inline nudge appears. "Turn back on
+      anyway" in the sheet **does** turn it on and clears the latch. Turning it
+      OFF is never blocked.
+- [ ] **App — notification:** critical, non-silenceable (no mute toggle); FCM
+      push lands on the **`geyser_leak_alerts`** max-importance channel with the
+      app closed. `(deploy)`
 
 ## 10. Core system scenarios
 
@@ -127,5 +136,7 @@ Firebase deploy or a test-publish first.
 ## Deploys / publishes for the testing round
 
 - [ ] `firebase deploy --only storage` — the `/firmware_gs/` rule.
+- [ ] `firebase deploy --only functions` — leak push copy + `geyser_leak_alerts`
+      channel routing (event types `0x09`/`0x0A`).
 - [ ] Test-publish firmware via `tools/publish_firmware.sh` (token flow).
 - [x] `firebase deploy --only database` — the `max ≤ 70` rule (already done).

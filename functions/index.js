@@ -155,6 +155,19 @@ const EVENT_LABELS = {
     body: () =>
       "Device clock is set again — your schedule is running normally",
   },
+  // Water leak — safety-critical. Routed to a dedicated max-importance
+  // channel so it lands loud with the app closed. Non-silenceable in-app.
+  9: {
+    title: "Water leak detected",
+    body: () =>
+      "GeyserSwitch cut the power. Check your geyser and water supply.",
+    channelId: "geyser_leak_alerts",
+    priority: "max",
+  },
+  10: {
+    title: "Leak cleared",
+    body: () => "The water-leak sensor is dry again",
+  },
 };
 
 exports.onDeviceEvent = onValueWritten("gs/{uid}/events/{did}", async (event) => {
@@ -178,6 +191,8 @@ exports.onDeviceEvent = onValueWritten("gs/{uid}/events/{did}", async (event) =>
     title: label.title,
     body: label.body(temp),
     data: { type: String(type), temp: String(temp), deviceId: did },
+    channelId: label.channelId,
+    priority: label.priority,
   });
 
   console.log(`onDeviceEvent: uid=${uid} did=${did} type=${type} sent=${sent}`);
@@ -259,8 +274,12 @@ exports.checkDeviceOffline = onSchedule("every 2 minutes", async (event) => {
 
 // ── Shared FCM send helper ───────────────────────────────────────
 
-async function sendPushToAllTokens(uid, { title, body, data }) {
+async function sendPushToAllTokens(uid, { title, body, data, channelId, priority }) {
   const firestore = admin.firestore();
+  // Per-event overrides fall back to the standard alert channel, so every
+  // existing caller (offline scheduler, temp events) is unchanged.
+  const androidChannelId = channelId || "geyser_alerts";
+  const androidPriority = priority || "high";
   const tokensSnap = await firestore
     .collection("fcm_tokens").doc(uid)
     .collection("tokens").where("valid", "==", true)
@@ -283,8 +302,8 @@ async function sendPushToAllTokens(uid, { title, body, data }) {
     data: dataPayload,
     android: {
       notification: {
-        channelId: "geyser_alerts",
-        priority: "high",
+        channelId: androidChannelId,
+        priority: androidPriority,
       },
     },
     apns: {

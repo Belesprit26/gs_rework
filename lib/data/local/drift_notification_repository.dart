@@ -80,6 +80,31 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
+  Future<bool> hasActiveLeak(String deviceId) async {
+    // Most recent leak for this device.
+    final latestLeak = await (_db.select(_db.notificationEntries)
+          ..where((t) =>
+              t.deviceId.equals(deviceId) &
+              t.type.equals(NotificationType.leak.code))
+          ..orderBy([(t) => OrderingTerm.desc(t.timestamp)])
+          ..limit(1))
+        .getSingleOrNull();
+    if (latestLeak == null) return false;
+
+    // Most recent clear. A leak is unresolved when no clear has arrived
+    // since it, i.e. the latest leak is newer than the latest clear.
+    final latestClear = await (_db.select(_db.notificationEntries)
+          ..where((t) =>
+              t.deviceId.equals(deviceId) &
+              t.type.equals(NotificationType.leakClear.code))
+          ..orderBy([(t) => OrderingTerm.desc(t.timestamp)])
+          ..limit(1))
+        .getSingleOrNull();
+    if (latestClear == null) return true;
+    return latestLeak.timestamp.isAfter(latestClear.timestamp);
+  }
+
+  @override
   Future<bool> hasMatchingEvent({
     required String deviceId,
     required NotificationType type,

@@ -51,6 +51,13 @@ class NotificationService {
 
   final _unreadCountController = StreamController<int>.broadcast();
 
+  /// Fires whenever the stored notification set changes (any insert, via
+  /// BLE live/buffer or FCM). Consumers that derive state from the event
+  /// history — e.g. the dashboard leak rail — re-query on each tick. Emits
+  /// no payload; it's a "something changed, re-read" pulse. Kept open for
+  /// the app's lifetime so UI listeners survive sign-out/in.
+  final _changesController = StreamController<void>.broadcast();
+
   /// Resolve the currently connected BLE identifier to its canonical
   /// RTDB device ID.  Returns null if unmapped or disconnected.
   String? get _rtdbDeviceId {
@@ -61,6 +68,17 @@ class NotificationService {
 
   /// Stream of unread notification count (for badge UI).
   Stream<int> get unreadCount => _unreadCountController.stream;
+
+  /// Fires after the stored notification set changes (see
+  /// [_changesController]).
+  Stream<void> get changes => _changesController.stream;
+
+  /// Signal that the stored notification set changed. Called internally on
+  /// every insert; also called by the FCM foreground handler, whose insert
+  /// bypasses this service.
+  void notifyChanged() {
+    if (!_changesController.isClosed) _changesController.add(null);
+  }
 
   int _lastUnreadCount = 0;
 
@@ -207,6 +225,7 @@ class NotificationService {
             .toList();
         if (fresh.isNotEmpty) {
           await _notifications.insertBatch(fresh);
+          notifyChanged();
         }
         debugLog('NotificationService',
             'Synced ${fresh.length} buffered events '
@@ -321,6 +340,7 @@ class NotificationService {
 
         // Always store, regardless of mute preferences.
         _notifications.insert(notification).then((_) {
+          notifyChanged();
           // Only increment badge if this type is enabled.
           if (_prefs.isNotificationTypeEnabled(type)) {
             _lastUnreadCount++;

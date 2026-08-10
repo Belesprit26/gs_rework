@@ -21,6 +21,13 @@ const _channelId = 'geyser_alerts';
 const _channelName = 'Geyser Alerts';
 const _channelDesc = 'Temperature events and device status alerts';
 
+// Dedicated max-importance channel for water-leak alerts, so a safety
+// event lands loud even when the app is closed. Must match the channelId
+// the cloud function sets for event type 0x09 (functions/index.js).
+const _leakChannelId = 'geyser_leak_alerts';
+const _leakChannelName = 'Water Leak Alerts';
+const _leakChannelDesc = 'Critical water-leak warnings';
+
 /// Top-level handler — runs in its own isolate when the app is terminated.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -262,17 +269,25 @@ class PushNotificationManager {
     );
 
     if (Platform.isAndroid) {
+      final android = _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
       const channel = AndroidNotificationChannel(
         _channelId,
         _channelName,
         description: _channelDesc,
         importance: Importance.high,
       );
+      await android?.createNotificationChannel(channel);
 
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
+      const leakChannel = AndroidNotificationChannel(
+        _leakChannelId,
+        _leakChannelName,
+        description: _leakChannelDesc,
+        importance: Importance.max,
+      );
+      await android?.createNotificationChannel(leakChannel);
     }
   }
 
@@ -322,6 +337,7 @@ class PushNotificationManager {
     final notification = message.notification;
     if (notification == null) return;
 
+    var isLeak = false;
     final typeStr = message.data['type'];
     if (typeStr != null) {
       final typeCode = int.tryParse(typeStr);
@@ -330,6 +346,7 @@ class PushNotificationManager {
         if (!_prefs.isNotificationTypeEnabled(type)) {
           return;
         }
+        isLeak = type == NotificationType.leak;
       }
     }
 
@@ -337,16 +354,25 @@ class PushNotificationManager {
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       notification.title,
       notification.body,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channelId,
-          _channelName,
-          channelDescription: _channelDesc,
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: DarwinNotificationDetails(),
+      NotificationDetails(
+        android: isLeak
+            ? const AndroidNotificationDetails(
+                _leakChannelId,
+                _leakChannelName,
+                channelDescription: _leakChannelDesc,
+                importance: Importance.max,
+                priority: Priority.max,
+                icon: '@mipmap/ic_launcher',
+              )
+            : const AndroidNotificationDetails(
+                _channelId,
+                _channelName,
+                channelDescription: _channelDesc,
+                importance: Importance.high,
+                priority: Priority.high,
+                icon: '@mipmap/ic_launcher',
+              ),
+        iOS: const DarwinNotificationDetails(),
       ),
     );
   }
@@ -401,6 +427,7 @@ class PushNotificationManager {
       ));
 
       _notificationService.refreshUnreadCount();
+      _notificationService.notifyChanged();
 
       debugLog('FCM',
           'Bridged remote notification: ${type.label} @ $temp°C');

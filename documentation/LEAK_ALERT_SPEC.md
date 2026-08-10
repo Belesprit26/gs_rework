@@ -1,10 +1,13 @@
 # Water-leak alert — end-to-end spec
 
-Status: **firmware done; app banner + FCM copy remain.** The leak sensor is on
-GPIO22. On a leak it alerts the phone (live BLE + FCM push), cuts power, and
-**latches** OFF against the schedule/auto-reheat — but the **user can override**
-(button/app) to resume normal running while it's still wet, and it **re-arms
-only after a confirmed dry**. **No LED effect**, by decision.
+Status: **firmware + app + cloud done** (pending bench + deploy). The leak
+sensor is on GPIO22. On a leak it alerts the phone (live BLE + FCM push on a
+dedicated max-importance channel), cuts power, and **latches** OFF against the
+schedule/auto-reheat — but the **user can override** (button/app) to resume
+normal running while it's still wet, and it **re-arms only after a confirmed
+dry**. In the app it surfaces as a **hanging drop badge** in the focal-card
+gutter (not a banner), and the power toggle is **gated** while latched. **No LED
+effect**, by decision.
 
 ## Principle
 
@@ -48,24 +51,38 @@ is wired in `main.c` (`leak_task`, GPIO22). Fires once per episode via
 ## 2. App (`gs_rework`) — DONE
 
 - `NotificationType.leak (0x09)` / `leakClear (0x0A)` added
-  (`device_notification.dart`) and rendered through all six `NotificationType`
-  switches (`device_notification.dart` body, `settings_tab.dart` +
-  `notifications_page.dart` colour/icon): leak → red + `Icons.water_damage`,
-  body "Water leak detected near the geyser — check it now".
-- **Not silenceable:** `leak` is excluded from `NotificationType.settable`, so
-  it has no mute toggle and always alerts. `leakClear` stays mutable.
+  (`device_notification.dart`) and rendered through all `NotificationType`
+  switches. **Not silenceable:** `leak` is excluded from
+  `NotificationType.settable`, so it always alerts. `leakClear` stays mutable.
+- **Wet-state derivation:** `NotificationRepository.hasActiveLeak(deviceId)` —
+  the most recent `leak` not yet followed by a `leakClear`. Independent of
+  dismissal (clearing the list doesn't clear the hazard) and survives restarts.
+  Re-derived on every `NotificationService.changes` tick (a "something changed"
+  pulse now fired on every insert — BLE live, buffer sync, and FCM foreground).
+- **Hanging drop badge (not a banner):** `_FocalWithAlertRail` in
+  `dashboard_page.dart` puts a blue-drop neu badge in the focal card's existing
+  46 px left gutter while a leak is unresolved. Purely additive — a device with
+  nothing wrong renders exactly as before. Tapping the badge opens
+  `showLeakDetailSheet` (context + numbered steps + the deliberate override).
+- **Gated toggle:** tapping the power toggle while latched (`_leakActive &&
+  !isOn`) does **not** send the command — it shows an inline nudge and the badge
+  draws the eye. Turning ON happens only through the sheet's "Turn back on
+  anyway", which calls `toggleGeyser()` (the firmware then clears the latch via
+  the user-override path). Turning OFF, or acting once already on, passes
+  through untouched.
 
-Still to do: a persistent **critical dashboard banner** — "leak detected —
-sensor still wet" — while a leak is unresolved, with the wet state **derived
-app-side from the event pair** (an `EVT_LEAK` not yet followed by
-`EVT_LEAK_CLEAR`), following the `_ClockLostBanner` pattern; and a
-**high-importance FCM channel** so the push lands with the app closed.
+Deferred (fast-follow): a **no-temperature-sensor thermometer badge** on the
+same rail (amber, informational) — the rail is built generically to host it.
 
-## 3. Cloud function (`functions/index.js`)
+## 3. Cloud function (`functions/index.js`) — DONE
 
-- `onDeviceEvent` maps event codes → push copy. Add `0x09` → title "Water leak
-  detected", body "GeyserSwitch cut the power. Check your geyser and water
-  supply." at high priority; `0x0A` → an optional, quieter "Leak cleared".
+- `EVENT_LABELS` maps `9` → title "Water leak detected", body "GeyserSwitch cut
+  the power. Check your geyser and water supply." on a dedicated
+  **`geyser_leak_alerts`** channel at **`max`** priority; `10` → a quieter
+  "Leak cleared". `sendPushToAllTokens` takes optional `channelId`/`priority`
+  overrides (defaulting to the standard channel, so every other caller is
+  unchanged). The app creates the matching max-importance channel in
+  `push_notification_manager.dart` and routes a foreground leak through it.
 
 ## Nothing else changes
 
