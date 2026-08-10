@@ -135,8 +135,11 @@ Firebase deploy or a test-publish first.
 
 ## Deploys / publishes for the testing round
 
-- [ ] `firebase deploy --only storage` — the `/firmware_gs/` rule.
-- [ ] `firebase deploy --only functions` — leak push copy + `geyser_leak_alerts`
-      channel routing (event types `0x09`/`0x0A`).
+- [x] `firebase deploy --only storage` — the `/firmware_gs/` rule (done
+      2026-08-11; legacy `/firmware/**` left public).
+- [x] `firebase deploy --only functions:onDeviceEvent` — leak push copy +
+      `geyser_leak_alerts` channel routing, event types `0x09`/`0x0A` (done
+      2026-08-11; deployed per-function because a full functions deploy aborts
+      on the orphaned `sendPushToUser` — see OUTSTANDING §2).
 - [ ] Test-publish firmware via `tools/publish_firmware.sh` (token flow).
 - [x] `firebase deploy --only database` — the `max ≤ 70` rule (already done).
