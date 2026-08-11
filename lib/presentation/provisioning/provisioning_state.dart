@@ -62,10 +62,14 @@ class ProvisioningState extends Equatable {
   // ── Derived helpers ───────────────────────────────────────────────
 
   /// Whether the nickname is valid (1–16 chars, no spaces).
-  bool get isNicknameValid =>
-      deviceNickname.isNotEmpty &&
-      deviceNickname.length <= 16 &&
-      !deviceNickname.contains(' ');
+  bool get isNicknameValid {
+    if (deviceNickname.isEmpty) return false;
+    if (deviceNickname.contains(RegExp(r'\s'))) return false;
+    // Firmware rejects nickname writes over PROV_NICKNAME_MAX (16)
+    // BYTES — UTF-8 length, not character count (wifi_prov.c). 16
+    // multi-byte characters would be silently refused on-device.
+    return utf8.encode(deviceNickname).length <= 16;
+  }
 
   /// Whether any field changed from the initial (device-stored) values.
   bool get hasChanges {
@@ -93,8 +97,14 @@ class ProvisioningState extends Equatable {
   bool get canSubmit {
     if (!isNicknameValid) return false;
     if (wifiEnabled && ssid.isEmpty) return false;
-    // Require password when WiFi creds will actually be sent.
-    if (_willSendWifi && wifiPassword.isEmpty) return false;
+    // Firmware buffers are s_ssid[33] / s_pass[65] (wifi_prov.c):
+    // longer input is silently TRUNCATED on-device into wrong
+    // credentials — refuse it here instead. WPA2 minimum is 8.
+    if (wifiEnabled && utf8.encode(ssid).length > 32) return false;
+    if (_willSendWifi) {
+      final passBytes = utf8.encode(wifiPassword).length;
+      if (passBytes < 8 || passBytes > 63) return false;
+    }
     if (!hasChanges) return false;
     return true;
   }

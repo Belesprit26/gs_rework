@@ -228,11 +228,16 @@ class _ConfigureViewState extends State<_ConfigureView> {
         ),
         const SizedBox(height: 8),
         AppTextField(
-          hintText: 'e.g. John/Upstairs',
+          hintText: 'e.g. Home or Upstairs',
           controller: _nicknameController,
           maxLength: 16,
+          // ASCII-only keeps characters == bytes: the firmware caps the
+          // nickname at 16 BYTES and it becomes the BLE advertising
+          // name, so multi-byte characters would be refused on-device.
+          // (A pre-existing name outside this set still validates by
+          // byte length — the filter only constrains new typing.)
           inputFormatters: [
-            FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_-]')),
           ],
           onChanged: cubit.setDeviceNickname,
         ),
@@ -269,6 +274,8 @@ class _ConfigureViewState extends State<_ConfigureView> {
             label: 'Network Name (SSID)',
             hintText: 'Your WiFi network name',
             controller: _ssidController,
+            // WiFi spec / firmware buffer: 32 bytes (s_ssid[33]).
+            maxLength: 32,
             onChanged: cubit.setSsid,
           ),
           const SizedBox(height: 12),
@@ -276,9 +283,11 @@ class _ConfigureViewState extends State<_ConfigureView> {
             label: 'Password',
             hintText: state.initialWifiEnabled
                 ? '******'
-                : 'WiFi password',
+                : 'WiFi password (8–63 characters)',
             obscureText: true,
             controller: _passwordController,
+            // WPA2 passphrase bounds; firmware buffer s_pass[65].
+            maxLength: 63,
             onChanged: cubit.setWifiPassword,
           ),
           const SizedBox(height: 20),
