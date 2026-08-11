@@ -206,12 +206,40 @@ class PrefsManager {
     await _prefs.remove('$_kHeatSavedArPrefix$rtdbDeviceId');
   }
 
+  // ── Device last-seen (connectivity badge) ─────────────────────────
+  //
+  // Local copy of the last moment we were in contact with a device by
+  // ANY path (BLE ready, or a fresh RTDB heartbeat). Gives BLE-only
+  // devices a real "down for X" figure and survives app restarts, where
+  // the cubit's RTDB-fed lastSeen starts null. Keyed by RTDB device id;
+  // wiped on device removal and sign-out.
+
+  static const _kLastSeenPrefix = 'device_last_seen_';
+
+  /// The last locally-recorded contact with this device, if any.
+  DateTime? deviceLastSeenLocal(String rtdbDeviceId) {
+    final ms = _prefs.getInt('$_kLastSeenPrefix$rtdbDeviceId');
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// Record a moment of contact with this device.
+  Future<void> setDeviceLastSeenLocal(
+    String rtdbDeviceId,
+    DateTime at,
+  ) async {
+    await _prefs.setInt(
+      '$_kLastSeenPrefix$rtdbDeviceId',
+      at.millisecondsSinceEpoch,
+    );
+  }
+
   /// Remove a device mapping and its nickname.
   Future<void> removeDevice(String bleMac, String rtdbDeviceId) async {
     final key = '$_kRtdbDidPrefix${_sanitiseMac(bleMac)}';
     await _prefs.remove(key);
     await _prefs.remove('$_kDeviceNickPrefix$rtdbDeviceId');
     await disableTimeHeatMode(rtdbDeviceId);
+    await _prefs.remove('$_kLastSeenPrefix$rtdbDeviceId');
   }
 
   // ── Sign-out cleanup ──────────────────────────────────────────────
@@ -231,7 +259,8 @@ class PrefsManager {
         k.startsWith(_kDeviceNickPrefix) ||
         k.startsWith(_kHeatTimeModePrefix) ||
         k.startsWith(_kHeatSavedMaxPrefix) ||
-        k.startsWith(_kHeatSavedArPrefix));
+        k.startsWith(_kHeatSavedArPrefix) ||
+        k.startsWith(_kLastSeenPrefix));
     for (final key in keysToRemove.toList()) {
       await _prefs.remove(key);
     }

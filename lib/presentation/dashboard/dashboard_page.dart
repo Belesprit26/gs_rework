@@ -7,12 +7,10 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../../core/debug/debug_log.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../di/locator.dart';
-import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/geyser/entities/geyser_snapshot.dart';
 import '../../domain/geyser/temp_limits.dart';
 import '../../domain/notifications/repositories/notification_repository.dart';
 import '../ble/ble_connection_cubit.dart';
-import '../ble/device_scan_page.dart';
 import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../auth/widgets/neu_auth_widgets.dart';
@@ -20,6 +18,7 @@ import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
 import '../shared/feedback/app_snack.dart';
 import '../shared/feedback/haptics.dart';
+import 'connectivity_badge.dart';
 import '../settings/settings_tab.dart';
 import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/neu/neu.dart';
@@ -317,14 +316,13 @@ class _SingleDeviceHome extends StatelessWidget {
               isBusy: state.isBusy,
               onSensorOfflineTap: () => _showSensorOfflineInfo(context),
             ),
+            // The old mode banner's job now lives in the rail's
+            // connectivity badge + its tap sheet.
             const SizedBox(height: 12),
-
-            const _ModeBanner(),
             if (!snap.deviceClockValid) ...[
-              const SizedBox(height: 8),
               _ClockLostBanner(intervalMode: snap.intervalModeActive),
+              const SizedBox(height: 12),
             ],
-            const SizedBox(height: 12),
 
             // Savings summary + quick-glance tiles.
             const _SavingsCard(),
@@ -1161,14 +1159,23 @@ class _FocalWithAlertRailState extends State<_FocalWithAlertRail> {
           children: [
             SizedBox(
               width: 46,
-              child: _leakActive
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 20),
-                      child: Center(
-                        child: _LeakBadge(onTap: _openSheet),
-                      ),
-                    )
-                  : null,
+              // Connectivity pinned top (a stable anchor that never
+              // shifts); hazard badges stack beneath it.
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  children: [
+                    ConnectivityBadge(
+                      deviceId: widget.deviceId,
+                      deviceName: widget.name,
+                    ),
+                    if (_leakActive) ...[
+                      const SizedBox(height: 12),
+                      _LeakBadge(onTap: _openSheet),
+                    ],
+                  ],
+                ),
+              ),
             ),
             Expanded(
               child: GeyserFocalCard(
@@ -1590,128 +1597,6 @@ class _ClockLostBanner extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-// ── Mode / connectivity banner ────────────────────────────────────────
-
-class _ModeBanner extends StatelessWidget {
-  const _ModeBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final gState = context.watch<GeyserControlCubit>().state;
-    final bleState = context.watch<BleConnectionCubit>().state;
-    final theme = Theme.of(context);
-
-    final IconData icon;
-    final String label;
-    final Color color;
-    VoidCallback? onTap;
-    Widget? trailing;
-
-    switch (gState.mode) {
-      case GeyserMode.ble:
-        icon = Icons.bluetooth_connected;
-        label = 'Connected via Bluetooth';
-        color = Colors.blue;
-
-      case GeyserMode.remote:
-        if (gState.deviceOffline) {
-          icon = Icons.cloud_off_rounded;
-          label = 'Device offline';
-          color = Colors.orange;
-          if (gState.deviceLastSeen != null) {
-            trailing = Text(
-              'Last seen ${_timeAgo(gState.deviceLastSeen!)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.orange.shade700,
-                fontSize: 11,
-              ),
-            );
-          }
-        } else {
-          icon = Icons.cloud_done_rounded;
-          label = 'Connected via WiFi';
-          color = Colors.green;
-          if (gState.deviceLastSeen != null) {
-            trailing = Text(
-              _timeAgo(gState.deviceLastSeen!),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.grey.shade600,
-                fontSize: 11,
-              ),
-            );
-          }
-        }
-
-      case GeyserMode.offline:
-        final isBleConnecting =
-            gState.bleStatus == BleConnectionStatus.connecting ||
-            gState.bleStatus == BleConnectionStatus.discoveringServices ||
-            gState.bleStatus == BleConnectionStatus.reconnecting;
-
-        if (isBleConnecting) {
-          icon = Icons.bluetooth_searching;
-          label = 'Connecting…';
-          color = Colors.orange;
-          onTap = () => Navigator.of(context).push(DeviceScanPage.route());
-        } else if (!bleState.isBluetoothOn) {
-          icon = Icons.bluetooth_disabled;
-          label = 'Bluetooth is off';
-          color = Colors.grey;
-          onTap = () => Navigator.of(context).push(DeviceScanPage.route());
-        } else {
-          icon = Icons.cloud_off_rounded;
-          label = 'Not connected';
-          color = Colors.grey;
-          onTap = () => Navigator.of(context).push(DeviceScanPage.route());
-        }
-    }
-
-    final banner = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          if (trailing != null) trailing,
-          if (onTap != null)
-            Icon(
-              Icons.chevron_right,
-              size: 16,
-              color: color.withValues(alpha: 0.6),
-            ),
-        ],
-      ),
-    );
-
-    if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: banner);
-    }
-    return banner;
-  }
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 30) return 'just now';
-    if (diff.inMinutes < 1) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    return '${diff.inHours}h ago';
   }
 }
 

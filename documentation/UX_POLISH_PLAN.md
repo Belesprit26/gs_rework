@@ -198,6 +198,18 @@ Connectivity badge is **pinned first** (top, aligned with the focal card's
 top edge — a stable anchor that never moves); hazard badges (leak now, the
 no-sensor thermometer later) stack beneath it. Gap 12 px.
 
+### Downtime visibility (confirmed 2026-08-11)
+
+When the badge is orange it carries a **compact duration caption**
+beneath the disc ("4m" / "2h" / "3d", tabular, muted orange, 1-minute
+ticker that runs only while down); the sheet shows the full "last seen…"
+sentence. Backing it: a **local per-device last-seen record** in
+`PrefsManager`, written (throttled to 1/min) whenever the badge observes
+contact by either path — so BLE-only devices get a real downtime figure
+and the number survives app restarts, where the cubit's RTDB-fed
+`deviceLastSeen` starts null. The badge shows the fresher of the local
+and RTDB values.
+
 ### Tap → connection sheet
 
 The badge is tappable (haptic `tap`) and opens a neu bottom sheet carrying

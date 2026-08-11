@@ -147,7 +147,29 @@ Real phone required — the simulator has no haptic engine.
 - [ ] System setting respected: disable haptics in OS settings → app goes
       quiet without errors.
 
-## 11. Core system scenarios
+## 11. App — connectivity rail badge (UX polish C)
+
+The mode banner is gone; its whole job moved to the rail badge + sheet.
+
+- [ ] Badge states: BLE connected = grey icon / thin blue halo; WiFi =
+      grey / green halo; device offline / not connected / Bluetooth off =
+      **orange crossed link + orange halo**; connecting = grey + amber
+      breathing halo.
+- [ ] Rail order: connectivity always top; the leak drop stacks beneath it
+      when latched (both visible together).
+- [ ] **Downtime caption:** with the device off, the orange badge shows
+      "4m" → ticks over minutes → "2h" style buckets; caption absent while
+      connected.
+- [ ] Caption survives an app restart (local last-seen persistence) and
+      works for a **BLE-only** (never-provisioned-WiFi) device.
+- [ ] Tap → sheet: status card + "last seen…" sentence; **Reconnect**
+      (only when paired + BT on + not connected) actually reconnects;
+      **Pair a device** opens the scan page; **Configure WiFi** disabled
+      with "needs Bluetooth" until BLE is up, then opens provisioning.
+- [ ] Clock-lost and owner-locked banners still render as before (only
+      the mode banner was replaced).
+
+## 12. Core system scenarios
 
 - [ ] Run the 19-scenario field-validation matrix in
       `MVP_STABILIZATION_PLAN.md` §8 (provisioning, scheduling, sensor-fail,
