@@ -9,6 +9,8 @@ import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
 import '../shared/feedback/app_snack.dart';
 import '../shared/feedback/haptics.dart';
+import '../shared/widgets/neu/neu.dart';
+import '../theme/app_colors.dart';
 import 'device_registry_cubit.dart';
 
 /// Lists all registered GeyserSwitch devices with rename/remove
@@ -22,11 +24,47 @@ class DeviceManagementPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage Devices')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(DeviceScanPage.route()),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Device'),
+      backgroundColor: AppColors.paper,
+      appBar: AppBar(
+        title: const Text('Manage Devices'),
+        backgroundColor: AppColors.paper,
+      ),
+      // Neu primary CTA pinned to the bottom (replaces the Material FAB).
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).push(DeviceScanPage.route()),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                  offset: const Offset(3, 3),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add, size: 19, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Add Device',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
       body: BlocBuilder<DeviceRegistryCubit, DeviceRegistryState>(
         builder: (context, regState) {
@@ -35,21 +73,24 @@ class DeviceManagementPage extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.devices_other,
-                      size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
+                  const NeuRaisedCircle(
+                    size: 88,
+                    child: Icon(Icons.devices_other,
+                        size: 36, color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 18),
                   Text(
                     'No devices registered',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.grey.shade600,
+                          color: AppColors.ink,
+                          fontWeight: FontWeight.w600,
                         ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Tap + to pair your first GeyserSwitch',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade500,
-                        ),
+                  const Text(
+                    'Pair your first GeyserSwitch below',
+                    style: TextStyle(
+                        fontSize: 14, color: AppColors.inkSecondary),
                   ),
                 ],
               ),
@@ -116,15 +157,26 @@ class _DeviceCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    return Card(
-      elevation: isSelected ? 2 : 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isSelected
-            ? BorderSide(color: cs.primary, width: 1.5)
-            : BorderSide(color: Colors.grey.shade300),
+    // SoftCard-style row; the SELECTED device carries a soft teal glow
+    // instead of a hard border (the NeuPanel glowColor grammar).
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          ...neuRaisedShadows(distance: 4, blur: 10),
+          if (isSelected)
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.18),
+              blurRadius: 14,
+              spreadRadius: 1,
+            ),
+        ],
       ),
       child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: _buildStatusIcon(cs),
@@ -188,11 +240,32 @@ class _DeviceCard extends StatelessWidget {
         ),
       );
     }
-    return Icon(
-      isConnected
-          ? Icons.bluetooth_connected
-          : Icons.bluetooth_disabled_outlined,
-      color: isConnected ? cs.primary : Colors.grey.shade400,
+    return Container(
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.neuBase,
+        boxShadow: [
+          ...neuRaisedShadows(distance: 2, blur: 5),
+          if (isConnected)
+            BoxShadow(
+              color: AppColors.rampBlue.withValues(alpha: 0.28),
+              blurRadius: 6,
+              spreadRadius: 0.5,
+            ),
+        ],
+      ),
+      child: Icon(
+        isConnected
+            ? Icons.bluetooth_connected
+            : Icons.bluetooth_disabled_outlined,
+        size: 18,
+        color: isConnected
+            ? AppColors.ink.withValues(alpha: 0.72)
+            : AppColors.muted,
+      ),
     );
   }
 
@@ -204,9 +277,9 @@ class _DeviceCard extends StatelessWidget {
   }
 
   Color get _statusColor {
-    if (isConnected) return Colors.blue.shade700;
-    if (isBusy) return Colors.orange.shade700;
-    return Colors.grey.shade500;
+    if (isConnected) return AppColors.rampBlue;
+    if (isBusy) return AppColors.warning;
+    return AppColors.muted;
   }
 
   void _onAction(BuildContext context, _Action action) {

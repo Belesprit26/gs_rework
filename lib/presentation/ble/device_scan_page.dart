@@ -7,10 +7,15 @@ import '../../domain/ble/entities/scanned_device.dart';
 import '../notifications/notification_priming_sheet.dart';
 import '../provisioning/provisioning_sheet.dart';
 import '../shared/feedback/haptics.dart';
+import '../shared/widgets/neu/neu.dart';
+import '../theme/app_colors.dart';
 import 'ble_connection_cubit.dart';
 
 /// Full-screen page that scans for GeyserSwitch devices and lets
 /// the user select one to pair with.
+///
+/// Neu-styled (UX polish E1); all connection logic lives in
+/// [BleConnectionCubit] and is unchanged by the restyle.
 class DeviceScanPage extends StatelessWidget {
   const DeviceScanPage({super.key});
 
@@ -20,8 +25,10 @@ class DeviceScanPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.paper,
       appBar: AppBar(
         title: const Text('Pair Device'),
+        backgroundColor: AppColors.paper,
       ),
       body: BlocConsumer<BleConnectionCubit, BleConnectionState>(
         listenWhen: (prev, curr) =>
@@ -52,142 +59,31 @@ class DeviceScanPage extends StatelessWidget {
         builder: (context, state) {
           // ── Connected state: show paired device, not scan controls ─
           if (state.isConnected) {
-            return Column(
-              children: [
-                _StatusBanner(state: state),
-                const SizedBox(height: 32),
-
-                // ── Connection icons ──────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.bluetooth_connected,
-                        size: 48, color: Colors.blue),
-                    if (state.isWifiProvisioned) ...[
-                      const SizedBox(width: 12),
-                      const Icon(Icons.wifi, size: 48, color: Colors.green),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  state.displayName,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  state.pairedDeviceId ?? '',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () async {
-                    final provisioned = await showProvisioningSheet(context);
-                    if (!context.mounted) return;
-                    // Refresh device info after provisioning.
-                    context.read<BleConnectionCubit>().refreshDeviceInfo();
-                    if (provisioned == true) {
-                      await NotificationPrimingSheet.maybeShow(context);
-                    }
-                  },
-                  icon: const Icon(Icons.settings_outlined),
-                  label: const Text('Configure Device'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await context.read<BleConnectionCubit>().unpair();
-                  },
-                  icon: const Icon(Icons.link_off),
-                  label: const Text('Unpair Device'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                    side: BorderSide(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
-                          .withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-              ],
-            );
+            return _ConnectedView(state: state);
           }
 
           // ── Bluetooth off: prompt to enable ──────────────────────
           if (!state.isBluetoothOn) {
-            return Column(
-              children: [
-                _StatusBanner(state: state),
-                const Spacer(),
-                Icon(Icons.bluetooth_disabled,
-                    size: 64, color: Colors.grey.shade400),
-                const SizedBox(height: 16),
-                Text(
-                  'Bluetooth is Off',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Turn on Bluetooth to scan for\nGeyserSwitch devices',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () async {
-                    try {
-                      await FlutterBluePlus.turnOn();
-                    } catch (_) {
-                      // iOS doesn't support turnOn — user must do it manually.
-                    }
-                  },
-                  icon: const Icon(Icons.bluetooth),
-                  label: const Text('Turn On Bluetooth'),
-                ),
-                const Spacer(),
-              ],
-            );
+            return _BluetoothOffView(state: state);
           }
 
           // ── Disconnected state: scan controls ──────────────────────
           return Column(
             children: [
-              _StatusBanner(state: state),
+              _StatusCard(state: state),
 
               // ── Scan button ────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: state.isScanning
-                        ? () => context.read<BleConnectionCubit>().stopScan()
-                        : state.isBusy
-                            ? null
-                            : () =>
-                                context.read<BleConnectionCubit>().startScan(),
-                    icon: state.isScanning
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.bluetooth_searching),
-                    label: Text(state.isScanning ? 'Stop Scan' : 'Scan'),
-                  ),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: _ScanButton(
+                  isScanning: state.isScanning,
+                  isBusy: state.isBusy,
+                  onPressed: state.isScanning
+                      ? () => context.read<BleConnectionCubit>().stopScan()
+                      : state.isBusy
+                          ? null
+                          : () =>
+                              context.read<BleConnectionCubit>().startScan(),
                 ),
               ),
 
@@ -197,9 +93,8 @@ class DeviceScanPage extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     state.scanError!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.critical),
                   ),
                 ),
 
@@ -211,17 +106,17 @@ class DeviceScanPage extends StatelessWidget {
                           state.isScanning
                               ? 'Looking for GeyserSwitch devices…'
                               : 'Tap Scan to find nearby devices',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: AppColors.inkSecondary,
+                          ),
                         ),
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                         itemCount: state.scannedDevices.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final device = state.scannedDevices[index];
                           return _DeviceTile(
@@ -245,77 +140,312 @@ class DeviceScanPage extends StatelessWidget {
   }
 }
 
-// ── Status Banner ─────────────────────────────────────────────────────
+// ── Connected view ────────────────────────────────────────────────────
 
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.state});
+class _ConnectedView extends StatelessWidget {
+  const _ConnectedView({required this.state});
 
   final BleConnectionState state;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return Column(
+      children: [
+        _StatusCard(state: state),
+        const SizedBox(height: 36),
 
-    Color backgroundColor;
-    Color foregroundColor;
-    IconData icon;
-
-    switch (state.connectionStatus) {
-      case BleConnectionStatus.ready:
-        backgroundColor = Colors.blue.shade50;
-        foregroundColor = Colors.blue.shade800;
-        icon = Icons.bluetooth_connected;
-      case BleConnectionStatus.connecting:
-      case BleConnectionStatus.discoveringServices:
-      case BleConnectionStatus.reconnecting:
-        backgroundColor = Colors.orange.shade50;
-        foregroundColor = Colors.orange.shade800;
-        icon = Icons.bluetooth_searching;
-      case BleConnectionStatus.scanning:
-        backgroundColor = Colors.blue.shade50;
-        foregroundColor = Colors.blue.shade800;
-        icon = Icons.bluetooth_searching;
-      case BleConnectionStatus.disconnected:
-        backgroundColor = Colors.grey.shade100;
-        foregroundColor = Colors.grey.shade700;
-        icon = Icons.bluetooth_disabled;
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: backgroundColor,
-      child: Row(
-        children: [
-          Icon(icon, color: foregroundColor, size: 20),
-          if (state.isWifiProvisioned && state.isConnected) ...[
-            const SizedBox(width: 4),
-            Icon(Icons.wifi, color: Colors.green.shade700, size: 18),
-          ],
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              state.statusLabel,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: foregroundColor,
+        // Device disc — the connection made physical.
+        NeuRaisedCircle(
+          size: 96,
+          child: Icon(
+            Icons.bluetooth_connected,
+            size: 40,
+            color: AppColors.ink.withValues(alpha: 0.72),
+          ),
+        ),
+        if (state.isWifiProvisioned) ...[
+          const SizedBox(height: 14),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.wifi_rounded,
+                  size: 16, color: AppColors.save),
+              const SizedBox(width: 6),
+              Text(
+                'WiFi configured',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.save.withValues(alpha: 0.9),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        Text(
+          state.displayName,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          state.pairedDeviceId ?? '',
+          style: const TextStyle(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 28),
+        NeuButton(
+          label: 'Configure Device',
+          primary: true,
+          onPressed: () async {
+            final provisioned = await showProvisioningSheet(context);
+            if (!context.mounted) return;
+            // Refresh device info after provisioning.
+            context.read<BleConnectionCubit>().refreshDeviceInfo();
+            if (provisioned == true) {
+              await NotificationPrimingSheet.maybeShow(context);
+            }
+          },
+        ),
+        const SizedBox(height: 14),
+        GestureDetector(
+          onTap: () async {
+            await context.read<BleConnectionCubit>().unpair();
+          },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.link_off, size: 16, color: AppColors.critical),
+                SizedBox(width: 6),
+                Text(
+                  'Unpair Device',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.critical,
+                  ),
+                ),
+              ],
             ),
           ),
-          if (state.isPaired)
-            Text(
-              state.displayName,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: foregroundColor,
+        ),
+      ],
+    );
+  }
+}
+
+// ── Bluetooth-off view ────────────────────────────────────────────────
+
+class _BluetoothOffView extends StatelessWidget {
+  const _BluetoothOffView({required this.state});
+
+  final BleConnectionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _StatusCard(state: state),
+        const Spacer(),
+        NeuRaisedCircle(
+          size: 88,
+          child: Icon(Icons.bluetooth_disabled,
+              size: 36, color: AppColors.muted),
+        ),
+        const SizedBox(height: 18),
+        const Text(
+          'Bluetooth is Off',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Turn on Bluetooth to scan for\nGeyserSwitch devices',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14, color: AppColors.inkSecondary),
+        ),
+        const SizedBox(height: 24),
+        NeuButton(
+          label: 'Turn On Bluetooth',
+          primary: true,
+          onPressed: () async {
+            try {
+              await FlutterBluePlus.turnOn();
+            } catch (_) {
+              // iOS doesn't support turnOn — user must do it manually.
+            }
+          },
+        ),
+        const Spacer(),
+      ],
+    );
+  }
+}
+
+// ── Status card ───────────────────────────────────────────────────────
+
+class _StatusCard extends StatelessWidget {
+  const _StatusCard({required this.state});
+
+  final BleConnectionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color halo, IconData icon) = switch (state.connectionStatus) {
+      BleConnectionStatus.ready => (
+          AppColors.rampBlue,
+          Icons.bluetooth_connected
+        ),
+      BleConnectionStatus.connecting ||
+      BleConnectionStatus.discoveringServices ||
+      BleConnectionStatus.reconnecting => (
+          AppColors.warning,
+          Icons.bluetooth_searching
+        ),
+      BleConnectionStatus.scanning => (
+          AppColors.rampBlue,
+          Icons.bluetooth_searching
+        ),
+      BleConnectionStatus.disconnected => (
+          AppColors.muted,
+          Icons.bluetooth_disabled
+        ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: neuRaisedShadows(distance: 4, blur: 12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.neuBase,
+                boxShadow: [
+                  ...neuRaisedShadows(distance: 2, blur: 5),
+                  BoxShadow(
+                    color: halo.withValues(alpha: 0.28),
+                    blurRadius: 6,
+                    spreadRadius: 0.5,
+                  ),
+                ],
+              ),
+              child: Icon(icon,
+                  size: 18, color: AppColors.ink.withValues(alpha: 0.72)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                state.statusLabel,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                ),
               ),
             ),
-        ],
+            if (state.isWifiProvisioned && state.isConnected) ...[
+              const Icon(Icons.wifi_rounded,
+                  size: 16, color: AppColors.save),
+              const SizedBox(width: 8),
+            ],
+            if (state.isPaired)
+              Text(
+                state.displayName,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.inkSecondary),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Device Tile ───────────────────────────────────────────────────────
+// ── Scan button ───────────────────────────────────────────────────────
+
+class _ScanButton extends StatelessWidget {
+  const _ScanButton({
+    required this.isScanning,
+    required this.isBusy,
+    required this.onPressed,
+  });
+
+  final bool isScanning;
+  final bool isBusy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return GestureDetector(
+      onTap: onPressed,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.35),
+                offset: const Offset(3, 3),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isScanning)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                const Icon(Icons.bluetooth_searching,
+                    size: 18, color: Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                isScanning ? 'Stop Scan' : 'Scan',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Device tile ───────────────────────────────────────────────────────
 
 class _DeviceTile extends StatelessWidget {
   const _DeviceTile({
@@ -328,44 +458,105 @@ class _DeviceTile extends StatelessWidget {
   final bool isBusy;
   final VoidCallback onTap;
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // Signal strength indicator.
-    final strength = _signalStrength(device.rssi);
-
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        Icons.bluetooth,
-        color: theme.colorScheme.primary,
-      ),
-      title: Text(
-        device.name.isEmpty ? 'Unknown device' : device.name,
-        style: theme.textTheme.bodyLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: Text(
-        '${device.id}  •  $strength signal',
-        style: theme.textTheme.bodySmall,
-      ),
-      trailing: isBusy
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.chevron_right),
-      onTap: isBusy ? null : onTap,
-    );
+  /// 0–4 bars from RSSI, matching the old text buckets.
+  int get _bars {
+    if (device.rssi >= -50) return 4; // Excellent
+    if (device.rssi >= -65) return 3; // Good
+    if (device.rssi >= -80) return 2; // Fair
+    return 1; // Weak
   }
 
-  String _signalStrength(int rssi) {
-    if (rssi >= -50) return 'Excellent';
-    if (rssi >= -65) return 'Good';
-    if (rssi >= -80) return 'Fair';
-    return 'Weak';
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: isBusy ? null : onTap,
+      child: Opacity(
+        opacity: isBusy ? 0.6 : 1,
+        child: SoftCard(
+          padding: const EdgeInsets.all(14),
+          borderRadius: 16,
+          distance: 4,
+          blur: 10,
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.neuBase,
+                  boxShadow: neuRaisedShadows(distance: 2, blur: 5),
+                ),
+                child: const Icon(Icons.bluetooth,
+                    size: 19, color: AppColors.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      device.name.isEmpty ? 'Unknown device' : device.name,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      device.id,
+                      style: const TextStyle(
+                          fontSize: 11.5, color: AppColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+              _SignalDots(bars: _bars),
+              const SizedBox(width: 8),
+              if (isBusy)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                const Icon(Icons.chevron_right,
+                    size: 20, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Four ascending signal bars; lit count = strength.
+class _SignalDots extends StatelessWidget {
+  const _SignalDots({required this.bars});
+
+  final int bars;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < 4; i++) ...[
+          if (i > 0) const SizedBox(width: 2.5),
+          Container(
+            width: 4,
+            height: 6.0 + i * 3.5,
+            decoration: BoxDecoration(
+              color: i < bars
+                  ? AppColors.primary
+                  : AppColors.hairline,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }

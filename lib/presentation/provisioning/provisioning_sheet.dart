@@ -6,6 +6,8 @@ import '../../di/locator.dart';
 import '../../domain/provisioning/provisioning_status.dart';
 import '../shared/feedback/haptics.dart';
 import '../shared/widgets/app_text_field.dart';
+import '../shared/widgets/neu/neu.dart';
+import '../theme/app_colors.dart';
 import 'provisioning_cubit.dart';
 
 /// Shows the provisioning bottom sheet modal.
@@ -16,8 +18,10 @@ Future<bool?> showProvisioningSheet(BuildContext context) {
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: AppColors.paper,
+    showDragHandle: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (_) => BlocProvider(
       create: (_) => getIt<ProvisioningCubit>()..init(),
@@ -63,17 +67,8 @@ class _ProvisioningSheetBody extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // ── Drag handle ──────────────────────────────
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // (Drag handle comes from showDragHandle.)
+                  const SizedBox(height: 4),
 
                   // ── Content ──────────────────────────────────
                   Expanded(
@@ -181,19 +176,19 @@ class _ConfigureViewState extends State<_ConfigureView> {
         // ── Connection chips ───────────────────────────────────
         Row(
           children: [
-            _ConnectionChip(
+            const _ConnectionChip(
               icon: Icons.bluetooth_connected,
               label: 'Bluetooth',
               isActive: true,
-              activeColor: Colors.blue,
+              activeColor: AppColors.rampBlue,
               onTap: null, // Always active, not toggleable.
             ),
             const SizedBox(width: 12),
             _ConnectionChip(
-              icon: Icons.wifi,
+              icon: Icons.wifi_rounded,
               label: 'WiFi',
               isActive: state.wifiEnabled,
-              activeColor: Colors.green,
+              activeColor: AppColors.save,
               onTap: () {
                 Haptics.select();
                 cubit.toggleWifi();
@@ -207,7 +202,7 @@ class _ConfigureViewState extends State<_ConfigureView> {
               ? 'Device will connect via Bluetooth and WiFi'
               : 'Tap WiFi to also connect your device to the internet',
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+            color: AppColors.inkSecondary,
           ),
         ),
         const SizedBox(height: 24),
@@ -340,43 +335,49 @@ class _ConnectionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isActive
-              ? activeColor.withValues(alpha: 0.1)
-              : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isActive
-                ? activeColor.withValues(alpha: 0.5)
-                : Colors.grey.shade300,
-            width: 1.5,
+    // "Active is inset": an engaged chip is carved into the surface with
+    // an accent wash; inactive is a flat raised pill — the app-wide
+    // neu selection grammar.
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: isActive ? activeColor : AppColors.muted,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isActive ? activeColor : AppColors.muted,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isActive ? activeColor : Colors.grey.shade500,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isActive ? activeColor : Colors.grey.shade500,
+      ],
+    );
+
+    return GestureDetector(
+      onTap: onTap,
+      child: isActive
+          ? NeuInset(
+              borderRadius: 24,
+              tint: activeColor.withValues(alpha: 0.14),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              child: content,
+            )
+          : Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.neuBase,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: neuRaisedShadows(distance: 2, blur: 6),
               ),
+              child: content,
             ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -396,9 +397,9 @@ class _SummaryCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.4),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: neuRaisedShadows(distance: 3, blur: 8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,14 +525,19 @@ class _ProgressView extends StatelessWidget {
         ),
         const SizedBox(height: 32),
 
-        // Progress steps.
+        // Progress steps — sublabels mirror the device's status LED so
+        // the user can watch the phone and the unit agree
+        // (LED_STATUS_SPEC.md).
         _ProgressStep(
           label: 'Device name set',
+          sublabel: 'the light on your GeyserSwitch is blue while '
+              'connected to your phone',
           isDone: state.deviceStatus != ProvisioningStatus.idle,
         ),
         if (state.wifiEnabled) ...[
           _ProgressStep(
             label: 'Connecting to WiFi',
+            sublabel: 'the light blinks green while it joins your network',
             isDone: state.deviceStatus == ProvisioningStatus.wifiOk ||
                 state.deviceStatus == ProvisioningStatus.complete,
             isActive: state.deviceStatus == ProvisioningStatus.connecting,
@@ -551,50 +557,86 @@ class _ProgressView extends StatelessWidget {
 class _ProgressStep extends StatelessWidget {
   const _ProgressStep({
     required this.label,
+    this.sublabel,
     this.isDone = false,
     this.isActive = false,
     this.isFailed = false,
   });
 
   final String label;
+
+  /// Optional LED-mirroring hint shown under the label while the step
+  /// is pending/active (hidden once done — the moment has passed).
+  final String? sublabel;
   final bool isDone;
   final bool isActive;
   final bool isFailed;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final engaged = isDone || isActive || isFailed;
 
-    final Color color;
-    final IconData icon;
-
-    if (isFailed) {
-      color = theme.colorScheme.error;
-      icon = Icons.close_rounded;
-    } else if (isDone) {
-      color = Colors.green;
-      icon = Icons.check_circle_rounded;
-    } else if (isActive) {
-      color = Colors.orange;
-      icon = Icons.sync_rounded;
+    // Neu step-dot: filled disc for done/active/failed, inset socket for
+    // still-to-come.
+    final Widget dot;
+    if (engaged) {
+      final color = isFailed
+          ? AppColors.critical
+          : isDone
+              ? AppColors.primary
+              : AppColors.warning;
+      dot = Container(
+        width: 22,
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        child: Icon(
+          isFailed
+              ? Icons.close_rounded
+              : isDone
+                  ? Icons.check_rounded
+                  : Icons.sync_rounded,
+          size: 14,
+          color: Colors.white,
+        ),
+      );
     } else {
-      color = Colors.grey.shade400;
-      icon = Icons.circle_outlined;
+      dot = const NeuInset(
+        borderRadius: 11,
+        padding: EdgeInsets.zero,
+        child: SizedBox(width: 22, height: 22),
+      );
     }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 22),
+          dot,
           const SizedBox(width: 12),
-          Text(
-            label,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: isDone || isActive || isFailed
-                  ? theme.colorScheme.onSurface
-                  : Colors.grey.shade400,
-              fontWeight: isDone || isActive ? FontWeight.w600 : null,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: engaged ? AppColors.ink : AppColors.muted,
+                    fontWeight:
+                        isDone || isActive ? FontWeight.w600 : null,
+                  ),
+                ),
+                if (sublabel != null && !isDone) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    sublabel!,
+                    style: const TextStyle(
+                        fontSize: 11.5, color: AppColors.muted),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -623,14 +665,14 @@ class _ResultView extends StatelessWidget {
         Icon(
           success ? Icons.check_circle_rounded : Icons.error_rounded,
           size: 72,
-          color: success ? Colors.green : theme.colorScheme.error,
+          color: success ? AppColors.save : AppColors.critical,
         ),
         const SizedBox(height: 20),
         Text(
           success ? 'All Set!' : 'Setup Failed',
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w700,
-            color: success ? Colors.green : theme.colorScheme.error,
+            color: success ? AppColors.save : AppColors.critical,
           ),
         ),
         const SizedBox(height: 12),
@@ -648,7 +690,7 @@ class _ResultView extends StatelessWidget {
           Text(
             'Connected to "${state.ssid}"',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.green,
+              color: AppColors.save,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -656,22 +698,26 @@ class _ResultView extends StatelessWidget {
         if (success && state.remoteSetupFailed) ...[
           const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
             decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.shade200),
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: neuRaisedShadows(distance: 3, blur: 8),
+              border: const Border(
+                left: BorderSide(color: AppColors.warning, width: 3),
+              ),
             ),
             child: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
-                const SizedBox(width: 8),
+                const Icon(Icons.warning_amber_rounded,
+                    size: 19, color: AppColors.warning),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Remote control setup failed. WiFi control '
                     'will not work until re-provisioned.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.orange.shade900,
+                      color: AppColors.ink,
                     ),
                   ),
                 ),

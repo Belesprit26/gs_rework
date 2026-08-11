@@ -175,7 +175,29 @@ The mode banner is gone; its whole job moved to the rail badge + sheet.
       detent haptic; the status card and dashboard follow the switch
       live; single-device installs show no list.
 
-## 12. Core system scenarios
+## 12. App — provisioning surfaces (UX polish E1)
+
+Restyle + contract fixes; cubit/BLE logic unchanged. Contract reference:
+`APP_FIRMWARE_CONTRACT.md`.
+
+- [ ] Scan page: paper ground, neu status card, teal scan button, SoftCard
+      device rows with **signal bars**; connect flow + prov sheet +
+      notification priming still chain exactly as before.
+- [ ] Prov sheet: paper sheet + drag handle, inset connection chips,
+      SoftCard summary, neu step-dots with **LED-mirroring sublabels**
+      ("blue while connected", "blinks green while joining"); result view
+      teal/red with amber remote-fail card.
+- [ ] Device management: SoftCard rows (selected = teal glow), status-icon
+      disc, bottom "Add Device" neu CTA (FAB gone); rename/remove/reset
+      flows unchanged.
+- [ ] **Nickname contract:** typing accepts only [A-Za-z0-9_-]; a
+      pre-existing accented name ≤16 bytes still validates; 16-char names
+      pair and advertise correctly (`GeyserSwitch-<nick>`).
+- [ ] **WiFi contract:** SSID capped at 32, password 8–63 — a short
+      password blocks Submit instead of a doomed round-trip; creds with
+      max lengths provision successfully.
+
+## 13. Core system scenarios
 
 - [ ] Run the 19-scenario field-validation matrix in
       `MVP_STABILIZATION_PLAN.md` §8 (provisioning, scheduling, sensor-fail,
