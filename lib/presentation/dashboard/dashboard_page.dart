@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
+import '../../core/debug/debug_log.dart';
 import '../../data/local/prefs_manager.dart';
 import '../../di/locator.dart';
 import '../../domain/ble/ble_connection_status.dart';
@@ -17,6 +18,7 @@ import '../geyser/geyser_control_cubit.dart';
 import '../auth/widgets/neu_auth_widgets.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
+import '../shared/feedback/app_snack.dart';
 import '../settings/settings_tab.dart';
 import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/neu/neu.dart';
@@ -277,13 +279,21 @@ class _SingleDeviceHome extends StatelessWidget {
           prev.snapshot.isOn != curr.snapshot.isOn ||
           prev.error != curr.error,
       listener: (context, state) {
-        if (state.error != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Command failed: ${state.error}'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-            ),
+        final error = state.error;
+        if (error != null) {
+          // Raw error text is for the log, never the UI (UX_POLISH_PLAN §A).
+          debugLog('Dashboard', 'Command error: $error');
+          // A device we can't reach is a condition, not a fault — amber
+          // warning. Anything else is a genuine failure.
+          final unreachable =
+              error.contains('timed out') || error.contains('offline');
+          showAppSnack(
+            context,
+            type: unreachable ? AppSnackType.warning : AppSnackType.error,
+            message: unreachable
+                ? "Couldn't reach the geyser — it looks offline. "
+                    'Nothing was changed.'
+                : "That didn't go through. Try again in a moment.",
           );
         }
       },
@@ -440,6 +450,9 @@ class _SingleDeviceHome extends StatelessWidget {
                 onPressed: () {
                   cubit.setTimers(timers);
                   Navigator.pop(ctx);
+                  // Page context, not ctx — the dialog just popped.
+                  showAppSnack(context,
+                      type: AppSnackType.success, message: 'Timers saved');
                 },
               ),
             ],
@@ -707,6 +720,15 @@ class _SingleDeviceHome extends StatelessWidget {
                   );
                 }
                 if (ctx.mounted) Navigator.pop(ctx);
+                // Page context — survives the pop; guarded because of the
+                // await above.
+                if (context.mounted) {
+                  showAppSnack(context,
+                      type: AppSnackType.success,
+                      message: timeMode
+                          ? 'Heat-for-a-time saved'
+                          : 'Temperature range saved');
+                }
               },
             ),
           ],

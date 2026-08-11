@@ -64,6 +64,22 @@ abstract final class AppTheme {
           side: const BorderSide(color: AppColors.hairline),
         ),
       ),
+      // Safety net for any SnackBar not built via app_snack.dart — same
+      // ground (white card, ink text, rounded, floating), minus the accent
+      // bar. New code should use showAppSnack instead.
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.surface,
+        contentTextStyle: const TextStyle(
+          fontSize: 13.5,
+          color: AppColors.ink,
+        ),
+        actionTextColor: AppColors.primary,
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? AppColors.primary : null,

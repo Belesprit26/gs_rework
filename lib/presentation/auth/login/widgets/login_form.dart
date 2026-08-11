@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../di/locator.dart';
+import '../../../shared/feedback/app_snack.dart';
 import '../../../theme/app_colors.dart';
 import '../../widgets/neu_auth_widgets.dart';
 import '../login_bloc.dart';
@@ -17,10 +18,9 @@ class LoginForm extends StatelessWidget {
         listenWhen: (p, n) => p.forgotPasswordSent != n.forgotPasswordSent,
         listener: (context, state) {
           if (state.forgotPasswordSent) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Password reset email sent. Check your inbox.')),
-            );
+            showAppSnack(context,
+                type: AppSnackType.success,
+                message: 'Reset email sent — check your inbox.');
           }
         },
         child: Column(

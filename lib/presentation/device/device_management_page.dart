@@ -7,6 +7,7 @@ import '../../di/locator.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
+import '../shared/feedback/app_snack.dart';
 import 'device_registry_cubit.dart';
 
 /// Lists all registered GeyserSwitch devices with rename/remove
@@ -259,9 +260,15 @@ class _DeviceCard extends StatelessWidget {
   ) {
     final name = controller.text.trim();
     if (name.isEmpty) return;
+    // Capture before the pop unmounts the dialog's context.
+    final messenger = ScaffoldMessenger.of(ctx);
     prefs.setDeviceNickname(device.rtdbDeviceId, name);
     registry.updateNickname(device.rtdbDeviceId, name);
     Navigator.pop(ctx);
+    messenger.showSnackBar(appSnackBar(
+      type: AppSnackType.success,
+      message: 'Device renamed',
+    ));
   }
 
   void _showRemoveConfirmation(BuildContext context) {
@@ -319,14 +326,15 @@ class _DeviceCard extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               final ok = await ownerAuth.rotateKey(device.rtdbDeviceId);
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text(ok
-                      ? 'Access key reset.'
-                      : 'Could not reset the key — connect to the device and try again.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              // Messenger was captured before the async gap; success and
+              // failure now carry distinct severities.
+              messenger.showSnackBar(appSnackBar(
+                type: ok ? AppSnackType.success : AppSnackType.error,
+                message: ok
+                    ? 'Access key reset.'
+                    : "Couldn't reset the key — connect to the device "
+                        'and try again.',
+              ));
             },
             child: const Text('Reset key'),
           ),

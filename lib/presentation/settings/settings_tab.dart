@@ -19,6 +19,7 @@ import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../notifications/notification_priming_sheet.dart';
 import '../notifications/notification_service.dart';
+import '../shared/feedback/app_snack.dart';
 import '../shared/widgets/run_limit_chips.dart';
 import '../stats/device_stats_cubit.dart';
 import '../theme/app_colors.dart';
@@ -570,10 +571,16 @@ class _GeyserSetupRow extends StatelessWidget {
                   if (parsed != null && parsed > 0) {
                     config = config.copyWith(costPerKwh: parsed);
                   }
+                  // Captured before the awaits/pop invalidate ctx.
+                  final messenger = ScaffoldMessenger.of(ctx);
                   if (deviceId != null) {
                     await configRepo.saveConfig(deviceId, config);
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
+                  messenger.showSnackBar(appSnackBar(
+                    type: AppSnackType.success,
+                    message: 'Geyser setup saved',
+                  ));
                 },
                 child: const Text('Save'),
               ),
@@ -793,6 +800,8 @@ class _NotificationSettingsRow extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () async {
+                // Captured before the awaits/pop invalidate ctx.
+                final messenger = ScaffoldMessenger.of(ctx);
                 for (final entry in toggles.entries) {
                   await prefs.setNotificationTypeEnabled(
                     entry.key,
@@ -801,6 +810,10 @@ class _NotificationSettingsRow extends StatelessWidget {
                 }
                 getIt<NotificationService>().refreshUnreadCount();
                 if (ctx.mounted) Navigator.pop(ctx);
+                messenger.showSnackBar(appSnackBar(
+                  type: AppSnackType.success,
+                  message: 'Alert preferences saved',
+                ));
               },
               child: const Text('Save'),
             ),
