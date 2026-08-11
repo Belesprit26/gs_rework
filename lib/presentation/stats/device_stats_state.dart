@@ -17,7 +17,12 @@ class DeviceStatsState extends Equatable {
     this.lastBoot,
     this.standingLossKwhPerDay = 2.2,
     this.elapsedHoursToday = 24,
+    this.hasCurrentSensor = false,
   });
+
+  /// User-declared current sensor (Sensors card). Selects the
+  /// [EnergySource] every kWh figure flows through.
+  final bool hasCurrentSensor;
 
   final DailyStats stats;
   final GeyserConfig config;
@@ -67,10 +72,21 @@ class DeviceStatsState extends Equatable {
       (kBaselineKwhPerDay[config.tankSize] ?? 9.0) *
       (elapsedHoursToday / 24.0);
 
-  double get savedKwh =>
-      (standingLossKwhPerHour * unpoweredHours).clamp(0, baselineKwh);
+  /// The seam every kWh figure flows through (E2): estimated today,
+  /// measured once the current-sense firmware ships. Formulas moved to
+  /// energy_source.dart verbatim.
+  EnergySource get energySource =>
+      EnergySource.select(measuredHardware: hasCurrentSensor);
 
-  double get actualKwh => (baselineKwh - savedKwh).clamp(0, double.infinity);
+  EnergyDayContext get _day => (
+        standingLossKwhPerDay: standingLossKwhPerDay,
+        unpoweredHours: unpoweredHours,
+        baselineKwh: baselineKwh,
+      );
+
+  double get savedKwh => energySource.savedKwh(_day);
+
+  double get actualKwh => energySource.actualKwh(_day);
 
   double get actualCost => actualKwh * config.costPerKwh;
   double get savedCost => savedKwh * config.costPerKwh;
@@ -85,6 +101,7 @@ class DeviceStatsState extends Equatable {
     Object? lastBoot = _sentinel,
     double? standingLossKwhPerDay,
     double? elapsedHoursToday,
+    bool? hasCurrentSensor,
   }) {
     return DeviceStatsState(
       stats: stats ?? this.stats,
@@ -95,12 +112,19 @@ class DeviceStatsState extends Equatable {
       standingLossKwhPerDay:
           standingLossKwhPerDay ?? this.standingLossKwhPerDay,
       elapsedHoursToday: elapsedHoursToday ?? this.elapsedHoursToday,
+      hasCurrentSensor: hasCurrentSensor ?? this.hasCurrentSensor,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [stats, config, lastBoot, standingLossKwhPerDay, elapsedHoursToday];
+  List<Object?> get props => [
+        stats,
+        config,
+        lastBoot,
+        standingLossKwhPerDay,
+        elapsedHoursToday,
+        hasCurrentSensor,
+      ];
 }
 
 const _sentinel = Object();

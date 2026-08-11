@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../di/locator.dart';
 import '../../domain/provisioning/provisioning_status.dart';
+import '../device/device_registry_cubit.dart';
+import '../settings/sensors_sheet.dart';
 import '../shared/feedback/haptics.dart';
 import '../shared/widgets/app_text_field.dart';
 import '../shared/widgets/neu/neu.dart';
@@ -728,6 +730,47 @@ class _ResultView extends StatelessWidget {
         const SizedBox(height: 32),
 
         // ── Action buttons ─────────────────────────────────────
+        if (success) ...[
+          // One-tap sensor declaration while the unit is in hand
+          // (opens over this sheet; skippable). Needs the registered
+          // device id — hidden in the brief window before registration.
+          Builder(builder: (context) {
+            final deviceId = context
+                .watch<DeviceRegistryCubit>()
+                .state
+                .selectedRtdbId;
+            if (deviceId == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                onTap: () {
+                  Haptics.tap();
+                  showSensorsSheet(context, deviceId: deviceId);
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sensors_rounded,
+                          size: 17, color: AppColors.primary),
+                      SizedBox(width: 7),
+                      Text(
+                        'Set up your sensors',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
         SizedBox(
           width: double.infinity,
           height: 52,

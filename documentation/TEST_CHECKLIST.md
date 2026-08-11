@@ -197,7 +197,30 @@ Restyle + contract fixes; cubit/BLE logic unchanged. Contract reference:
       password blocks Submit instead of a doomed round-trip; creds with
       max lengths provision successfully.
 
-## 13. Core system scenarios
+## 13. App — sensors, energy seam & first-run (UX polish E2)
+
+- [ ] **Sensors card** (Settings → THIS GEYSER → Sensors): Temperature
+      shows locked "Included"; Leak + Current toggle with detent haptic;
+      subtitle summarises installed sensors; per-device (switch devices →
+      each keeps its own flags).
+- [ ] **Cross-phone sync:** toggle Current on phone A → RTDB
+      `set/$did/cs` updates (rules deployed 2026-08-12); phone B's sheet
+      adopts it on open.
+- [ ] Current ON shows the "measured readings arrive with a firmware
+      update" note; savings numbers are UNCHANGED (estimates still) —
+      the seam only re-selects the source.
+- [ ] **Prov hand-off:** provisioning success screen shows "Set up your
+      sensors" (only once the device is registered); opens the same
+      sheet over the result view.
+- [ ] **First-run:** fresh install / sign-in with no devices → "Pair your
+      GeyserSwitch" CTA card (no focal card, no rail badge, no stats);
+      app-bar logo breathes teal; CTA + logo both open the hub.
+- [ ] Pair a device → breathe stops, normal dashboard appears; remove the
+      last device → empty state + breathe return.
+- [ ] Leak alerts still fire regardless of the leak flag (an arriving
+      EVT_LEAK is never suppressed).
+
+## 14. Core system scenarios
 
 - [ ] Run the 19-scenario field-validation matrix in
       `MVP_STABILIZATION_PLAN.md` §8 (provisioning, scheduling, sensor-fail,

@@ -22,6 +22,7 @@ import '../notifications/notification_service.dart';
 import '../shared/feedback/app_snack.dart';
 import '../shared/feedback/haptics.dart';
 import '../shared/widgets/run_limit_chips.dart';
+import 'sensors_sheet.dart';
 import '../stats/device_stats_cubit.dart';
 import '../theme/app_colors.dart';
 
@@ -305,6 +306,8 @@ class _ThisGeyserSection extends StatelessWidget {
                 children: [
                   _GeyserSetupRow(),
                   const _RowDivider(),
+                  const _SensorsRow(),
+                  const _RowDivider(),
                   const _MaxRunControl(),
                 ],
               ),
@@ -417,6 +420,42 @@ class _DeviceSwitcher extends StatelessWidget {
 
 /// The geyser-setup summary row + editor dialog. Scoped to the selected
 /// device — settings are stored per-device.
+/// The Sensors declaration row — per-device; opens [showSensorsSheet].
+class _SensorsRow extends StatefulWidget {
+  const _SensorsRow();
+
+  @override
+  State<_SensorsRow> createState() => _SensorsRowState();
+}
+
+class _SensorsRowState extends State<_SensorsRow> {
+  @override
+  Widget build(BuildContext context) {
+    final deviceId =
+        context.watch<DeviceRegistryCubit>().state.selectedRtdbId;
+    if (deviceId == null) return const SizedBox.shrink();
+
+    final prefs = getIt<PrefsManager>();
+    final installed = [
+      'Temperature',
+      if (prefs.hasLeakSensor(deviceId)) 'Leak',
+      if (prefs.hasCurrentSensor(deviceId)) 'Current',
+    ].join(' · ');
+
+    return _SettingsRow(
+      icon: Icons.sensors_rounded,
+      title: 'Sensors',
+      subtitle: installed,
+      trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
+      onTap: () async {
+        await showSensorsSheet(context, deviceId: deviceId);
+        // Re-render the subtitle with any changes made in the sheet.
+        if (mounted) setState(() {});
+      },
+    );
+  }
+}
+
 class _GeyserSetupRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

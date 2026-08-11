@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/firebase/config/geyser_config_repository.dart';
+import '../../data/local/prefs_manager.dart';
+import '../../domain/energy/energy_source.dart';
 import '../../domain/geyser/entities/daily_stats.dart';
 import '../../domain/geyser/entities/geyser_config.dart';
 import '../../domain/geyser/repositories/rtdb_repository.dart';
@@ -20,10 +22,12 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState>
     required GeyserConfigRepository configRepository,
     required RemoteConfigRepository remoteConfigRepository,
     required FirebaseAuth firebaseAuth,
+    required PrefsManager prefsManager,
     required String deviceId,
   })  : _rtdb = rtdbRepository,
         _config = configRepository,
         _remoteConfig = remoteConfigRepository,
+        _prefs = prefsManager,
         _deviceId = deviceId,
         super(const DeviceStatsState()) {
     _authSub = firebaseAuth.authStateChanges().listen(_onAuthChanged);
@@ -32,6 +36,7 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState>
   final RtdbRepository _rtdb;
   final GeyserConfigRepository _config;
   final RemoteConfigRepository _remoteConfig;
+  final PrefsManager _prefs;
   String _deviceId;
 
   StreamSubscription<User?>? _authSub;
@@ -73,9 +78,21 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState>
     final gen = ++_selectionGen;
     _startConfigStream();
     _startElapsedTimer();
-    emit(state.copyWith(elapsedHoursToday: _elapsedHoursToday()));
+    emit(state.copyWith(
+      elapsedHoursToday: _elapsedHoursToday(),
+      hasCurrentSensor: _prefs.hasCurrentSensor(_deviceId),
+    ));
     _startStatsStream();
     await _loadLastBoot(gen);
+  }
+
+  /// Re-read the declared-sensor flag (Sensors card just changed it) so
+  /// the energy seam re-selects without a device switch.
+  void refreshSensorFlag() {
+    if (isClosed) return;
+    emit(state.copyWith(
+      hasCurrentSensor: _prefs.hasCurrentSensor(_deviceId),
+    ));
   }
 
   /// Load the device's last-boot time, discarding the result if the
@@ -141,7 +158,11 @@ class DeviceStatsCubit extends Cubit<DeviceStatsState>
     if (!_activated) return;
 
     final gen = ++_selectionGen;
-    emit(state.copyWith(stats: const DailyStats(), lastBoot: null));
+    emit(state.copyWith(
+      stats: const DailyStats(),
+      lastBoot: null,
+      hasCurrentSensor: _prefs.hasCurrentSensor(deviceId),
+    ));
     _startConfigStream();
     _startStatsStream();
     _loadLastBoot(gen);

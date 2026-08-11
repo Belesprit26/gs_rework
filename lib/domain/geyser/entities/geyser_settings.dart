@@ -11,6 +11,8 @@ class GeyserSettings extends Equatable {
     this.timerMask = 0,
     this.customTimer = 0,
     this.maxOnMinutes = 240,
+    this.currentSensor = false,
+    this.leakSensor = false,
   });
 
   final bool on;
@@ -27,6 +29,15 @@ class GeyserSettings extends Equatable {
   /// Max continuous relay-ON time in minutes (0 = disabled).
   final int maxOnMinutes;
 
+  /// User-declared: this unit has a current (power) sensor. App-side
+  /// config today; firmware ignores unknown keys until it grows a
+  /// consumer (APP_FIRMWARE_CONTRACT.md).
+  final bool currentSensor;
+
+  /// User-declared: this unit has a leak-detection probe. Never used to
+  /// suppress an arriving EVT_LEAK — if the event fires, water is real.
+  final bool leakSensor;
+
   factory GeyserSettings.fromMap(Map<dynamic, dynamic> map) {
     return GeyserSettings(
       on: map['on'] as bool? ?? false,
@@ -36,6 +47,8 @@ class GeyserSettings extends Equatable {
       timerMask: (map['tmask'] as num?)?.toInt() ?? 0,
       customTimer: (map['tcust'] as num?)?.toInt() ?? 0,
       maxOnMinutes: (map['maxon'] as num?)?.toInt() ?? 240,
+      currentSensor: map['cs'] as bool? ?? false,
+      leakSensor: map['ls'] as bool? ?? false,
     );
   }
 
@@ -47,6 +60,8 @@ class GeyserSettings extends Equatable {
         'tmask': timerMask,
         'tcust': customTimer,
         'maxon': maxOnMinutes,
+        'cs': currentSensor,
+        'ls': leakSensor,
       };
 
   GeyserSettings copyWith({
@@ -57,6 +72,8 @@ class GeyserSettings extends Equatable {
     int? timerMask,
     int? customTimer,
     int? maxOnMinutes,
+    bool? currentSensor,
+    bool? leakSensor,
   }) {
     return GeyserSettings(
       on: on ?? this.on,
@@ -66,10 +83,21 @@ class GeyserSettings extends Equatable {
       timerMask: timerMask ?? this.timerMask,
       customTimer: customTimer ?? this.customTimer,
       maxOnMinutes: maxOnMinutes ?? this.maxOnMinutes,
+      currentSensor: currentSensor ?? this.currentSensor,
+      leakSensor: leakSensor ?? this.leakSensor,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [on, maxTemp, minTemp, autoReheat, timerMask, customTimer, maxOnMinutes];
+  List<Object?> get props => [
+        on,
+        maxTemp,
+        minTemp,
+        autoReheat,
+        timerMask,
+        customTimer,
+        maxOnMinutes,
+        currentSensor,
+        leakSensor,
+      ];
 }

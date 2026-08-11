@@ -81,6 +81,7 @@ void registerPresentation(GetIt getIt) {
         configRepository: getIt<GeyserConfigRepository>(),
         remoteConfigRepository: getIt<RemoteConfigRepository>(),
         firebaseAuth: getIt<FirebaseAuth>(),
+        prefsManager: getIt<PrefsManager>(),
         deviceId: deviceId,
       );
     },

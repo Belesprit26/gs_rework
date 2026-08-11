@@ -206,6 +206,34 @@ class PrefsManager {
     await _prefs.remove('$_kHeatSavedArPrefix$rtdbDeviceId');
   }
 
+  // ── Sensor declaration (Sensors card) ─────────────────────────────
+  //
+  // What the user says is physically installed on this unit. Local
+  // mirror of the RTDB `set/$did` keys `cs`/`ls` (the cross-phone
+  // authority) so BLE-only installs and offline reads still work.
+  // Temperature has no flag — it ships in every package (locked ON).
+  // Defaults: current NO · leak NO. Keyed by RTDB device id; wiped on
+  // device removal and sign-out.
+
+  static const _kHasCurrentPrefix = 'sensor_current_';
+  static const _kHasLeakPrefix = 'sensor_leak_';
+
+  /// Whether this unit has a current (power-measuring) sensor.
+  bool hasCurrentSensor(String rtdbDeviceId) =>
+      _prefs.getBool('$_kHasCurrentPrefix$rtdbDeviceId') ?? false;
+
+  /// Whether this unit has a leak-detection probe.
+  bool hasLeakSensor(String rtdbDeviceId) =>
+      _prefs.getBool('$_kHasLeakPrefix$rtdbDeviceId') ?? false;
+
+  Future<void> setHasCurrentSensor(String rtdbDeviceId, bool v) async {
+    await _prefs.setBool('$_kHasCurrentPrefix$rtdbDeviceId', v);
+  }
+
+  Future<void> setHasLeakSensor(String rtdbDeviceId, bool v) async {
+    await _prefs.setBool('$_kHasLeakPrefix$rtdbDeviceId', v);
+  }
+
   // ── Device last-seen (connectivity badge) ─────────────────────────
   //
   // Local copy of the last moment we were in contact with a device by
@@ -240,6 +268,8 @@ class PrefsManager {
     await _prefs.remove('$_kDeviceNickPrefix$rtdbDeviceId');
     await disableTimeHeatMode(rtdbDeviceId);
     await _prefs.remove('$_kLastSeenPrefix$rtdbDeviceId');
+    await _prefs.remove('$_kHasCurrentPrefix$rtdbDeviceId');
+    await _prefs.remove('$_kHasLeakPrefix$rtdbDeviceId');
   }
 
   // ── Sign-out cleanup ──────────────────────────────────────────────
@@ -260,7 +290,9 @@ class PrefsManager {
         k.startsWith(_kHeatTimeModePrefix) ||
         k.startsWith(_kHeatSavedMaxPrefix) ||
         k.startsWith(_kHeatSavedArPrefix) ||
-        k.startsWith(_kLastSeenPrefix));
+        k.startsWith(_kLastSeenPrefix) ||
+        k.startsWith(_kHasCurrentPrefix) ||
+        k.startsWith(_kHasLeakPrefix));
     for (final key in keysToRemove.toList()) {
       await _prefs.remove(key);
     }

@@ -202,6 +202,12 @@ class _HomeTabState extends State<_HomeTab> {
         }
       },
       builder: (context, regState) {
+        // First-run (or last device removed): nothing to show a
+        // connection or reading for — a pairing CTA carries the
+        // instruction and the app-bar logo breathes to point the way.
+        if (regState.devices.isEmpty) {
+          return const _NoDeviceHome();
+        }
         if (!regState.isMultiDevice) {
           return const _SingleDeviceHome();
         }
@@ -253,6 +259,65 @@ class _HomeTabState extends State<_HomeTab> {
           ],
         );
       },
+    );
+  }
+}
+
+/// First-run home: no devices registered yet, so no focal card, no rail,
+/// no stats — one clear "pair it" card that opens the connection hub
+/// (the same sheet the breathing app-bar logo opens).
+class _NoDeviceHome extends StatelessWidget {
+  const _NoDeviceHome();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      children: [
+        const SizedBox(height: 28),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: NeuPanel(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            color: AppColors.surface,
+            child: Column(
+              children: [
+                const AuthLogoBadge(
+                    size: 72, plinthColor: AppColors.surface),
+                const SizedBox(height: 18),
+                const Text(
+                  'Pair your GeyserSwitch',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Connect over Bluetooth to set up your geyser — '
+                  'schedules, temperature and savings start here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    height: 1.4,
+                    color: AppColors.inkSecondary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                NeuButton(
+                  label: 'Get started',
+                  primary: true,
+                  onPressed: () {
+                    Haptics.tap();
+                    showConnectivitySheet(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -947,8 +1012,25 @@ class _LogoHubButton extends StatefulWidget {
   State<_LogoHubButton> createState() => _LogoHubButtonState();
 }
 
-class _LogoHubButtonState extends State<_LogoHubButton> {
+class _LogoHubButtonState extends State<_LogoHubButton>
+    with SingleTickerProviderStateMixin {
   bool _down = false;
+  late final AnimationController _breathe;
+
+  @override
+  void initState() {
+    super.initState();
+    _breathe = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    );
+  }
+
+  @override
+  void dispose() {
+    _breathe.dispose();
+    super.dispose();
+  }
 
   void _open() {
     Haptics.tap();
@@ -957,6 +1039,19 @@ class _LogoHubButtonState extends State<_LogoHubButton> {
 
   @override
   Widget build(BuildContext context) {
+    // First-run beacon: while no device is registered, the logo breathes
+    // a teal halo (the connecting-badge grammar) to point at the hub —
+    // and returns if the last device is ever removed.
+    final noDevices =
+        context.watch<DeviceRegistryCubit>().state.devices.isEmpty;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (noDevices && !reduceMotion) {
+      if (!_breathe.isAnimating) _breathe.repeat(reverse: true);
+    } else {
+      if (_breathe.isAnimating) _breathe.stop();
+    }
+
     return Semantics(
       button: true,
       label: 'Connection hub',
@@ -969,7 +1064,33 @@ class _LogoHubButtonState extends State<_LogoHubButton> {
         child: AnimatedScale(
           scale: _down ? 0.94 : 1,
           duration: const Duration(milliseconds: 110),
-          child: AuthLogoBadge(size: 44, pressed: _down),
+          child: AnimatedBuilder(
+            animation: _breathe,
+            builder: (context, child) {
+              final halo = noDevices
+                  ? AppColors.primary.withValues(
+                      alpha: reduceMotion
+                          ? 0.30
+                          : 0.15 + 0.25 * _breathe.value)
+                  : null;
+              return Container(
+                decoration: halo == null
+                    ? null
+                    : BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: halo,
+                            blurRadius: 10,
+                            spreadRadius: 1.5,
+                          ),
+                        ],
+                      ),
+                child: child,
+              );
+            },
+            child: AuthLogoBadge(size: 44, pressed: _down),
+          ),
         ),
       ),
     );
