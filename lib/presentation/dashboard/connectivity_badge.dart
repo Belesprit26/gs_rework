@@ -8,6 +8,7 @@ import '../../di/locator.dart';
 import '../../domain/ble/ble_connection_status.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
+import '../device/device_registry_cubit.dart';
 import '../geyser/geyser_control_cubit.dart';
 import '../provisioning/provisioning_sheet.dart';
 import '../shared/feedback/haptics.dart';
@@ -109,16 +110,11 @@ String sentenceAgo(DateTime dt) {
 /// this widget observes contact (BLE ready / fresh remote heartbeat) it
 /// persists the moment, throttled to once a minute.
 class ConnectivityBadge extends StatefulWidget {
-  const ConnectivityBadge({
-    super.key,
-    required this.deviceId,
-    required this.deviceName,
-  });
+  const ConnectivityBadge({super.key, required this.deviceId});
 
   /// Canonical RTDB device id — null before registration (the badge
   /// still renders; only persistence and the caption need the id).
   final String? deviceId;
-  final String deviceName;
 
   @override
   State<ConnectivityBadge> createState() => _ConnectivityBadgeState();
@@ -240,11 +236,7 @@ class _ConnectivityBadgeState extends State<ConnectivityBadge>
       child: GestureDetector(
         onTap: () {
           Haptics.tap();
-          showConnectivitySheet(
-            context,
-            deviceId: widget.deviceId,
-            deviceName: widget.deviceName,
-          );
+          showConnectivitySheet(context);
         },
         behavior: HitTestBehavior.opaque,
         child: Column(
@@ -303,11 +295,7 @@ class _ConnectivityBadgeState extends State<ConnectivityBadge>
 /// One surface, two entrances (rail badge now; app-bar logo in Phase D):
 /// live status + last-seen, and state-aware connection/provisioning
 /// actions. Watches the cubits so a reconnect updates it in place.
-Future<void> showConnectivitySheet(
-  BuildContext context, {
-  required String? deviceId,
-  required String deviceName,
-}) {
+Future<void> showConnectivitySheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.paper,
@@ -315,34 +303,33 @@ Future<void> showConnectivitySheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
-    builder: (sheetContext) => _ConnectivitySheetBody(
-      deviceId: deviceId,
-      deviceName: deviceName,
-    ),
+    builder: (sheetContext) => const _ConnectivitySheetBody(),
   );
 }
 
 class _ConnectivitySheetBody extends StatelessWidget {
-  const _ConnectivitySheetBody({
-    required this.deviceId,
-    required this.deviceName,
-  });
-
-  final String? deviceId;
-  final String deviceName;
+  const _ConnectivitySheetBody();
 
   @override
   Widget build(BuildContext context) {
     final gState = context.watch<GeyserControlCubit>().state;
     final bState = context.watch<BleConnectionCubit>().state;
+    final regState = context.watch<DeviceRegistryCubit>().state;
     final status = connectivityStatusFrom(gState, bState);
+
+    // One source of truth: the registry says which device this sheet is
+    // about, so switching inside the sheet updates everything live.
+    final deviceId = regState.selectedRtdbId;
+    final deviceName = regState.selectedDevice?.nickname ??
+        bState.deviceNickname ??
+        'Geyser';
 
     // Last-seen detail mirrors the badge's caption source.
     DateTime? lastSeen;
     if (status.isDown) {
       final local = deviceId == null
           ? null
-          : getIt<PrefsManager>().deviceLastSeenLocal(deviceId!);
+          : getIt<PrefsManager>().deviceLastSeenLocal(deviceId);
       final remote = gState.deviceLastSeen;
       lastSeen = switch ((local, remote)) {
         (null, final r) => r,
@@ -452,6 +439,70 @@ class _ConnectivitySheetBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
+
+            // ── Device list (2+ devices) ────────────────────────────
+            //
+            // Selecting here fans out exactly like the Settings picker
+            // (registry → coordinator → stats/control/dashboard). Only
+            // the SELECTED device has live connection state — a single
+            // control cubit follows the selection — so other rows show a
+            // neutral radio, not a fabricated status.
+            if (regState.isMultiDevice) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(6, 4, 6, 6),
+                child: Text(
+                  'YOUR GEYSERS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ),
+              for (var i = 0; i < regState.devices.length; i++)
+                GestureDetector(
+                  onTap: () {
+                    if (i != regState.selectedIndex) Haptics.select();
+                    context.read<DeviceRegistryCubit>().selectDevice(i);
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 9),
+                    child: Row(
+                      children: [
+                        Icon(
+                          i == regState.selectedIndex
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 19,
+                          color: i == regState.selectedIndex
+                              ? AppColors.primary
+                              : AppColors.muted,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            regState.devices[i].nickname,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: i == regState.selectedIndex
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        if (i == regState.selectedIndex)
+                          Icon(statusIcon,
+                              size: 16, color: statusIconColor),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 4),
+            ],
 
             // ── Actions ─────────────────────────────────────────────
             if (canReconnect)

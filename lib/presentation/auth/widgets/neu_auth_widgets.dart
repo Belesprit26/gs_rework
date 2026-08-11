@@ -25,6 +25,7 @@ class AuthLogoBadge extends StatelessWidget {
     super.key,
     this.size = 96,
     this.plinthColor = AppColors.neuBase,
+    this.pressed = false,
   });
 
   /// Overall diameter of the plinth.
@@ -32,6 +33,11 @@ class AuthLogoBadge extends StatelessWidget {
 
   /// Must match the background the badge sits on.
   final Color plinthColor;
+
+  /// Momentary press state ("active is inset"): the raised shadows pull
+  /// in tight so the plinth reads as pushed into the surface. Used by
+  /// the dashboard's logo hub button; auth screens leave it false.
+  final bool pressed;
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +50,8 @@ class AuthLogoBadge extends StatelessWidget {
         color: plinthColor,
         shape: BoxShape.circle,
         boxShadow: neuRaisedShadows(
-          distance: size * (7 / 96),
-          blur: size * (18 / 96),
+          distance: size * (7 / 96) * (pressed ? 0.3 : 1),
+          blur: size * (18 / 96) * (pressed ? 0.45 : 1),
         ),
       ),
       alignment: Alignment.center,

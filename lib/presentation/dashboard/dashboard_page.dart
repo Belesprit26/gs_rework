@@ -68,14 +68,14 @@ class _DashboardPageState extends State<DashboardPage> {
             if (!regState.isMultiDevice) {
               return const Align(
                 alignment: Alignment.centerLeft,
-                child: AuthLogoBadge(size: 44),
+                child: _LogoHubButton(),
               );
             }
             final device = regState.selectedDevice;
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AuthLogoBadge(size: 44),
+                const _LogoHubButton(),
                 const SizedBox(width: 12),
                 Text(
                   device?.nickname ?? 'Geyser',
@@ -933,6 +933,49 @@ class _TimeChip extends StatelessWidget {
   }
 }
 
+// ── Logo hub button ───────────────────────────────────────────────────
+//
+// The app-bar brand badge is a real button: press = momentary inset
+// ("active is inset"), tap = light haptic + the connection sheet — the
+// same surface the rail badge opens, so connection + provisioning are
+// reachable from every tab. Phase D of UX_POLISH_PLAN.
+
+class _LogoHubButton extends StatefulWidget {
+  const _LogoHubButton();
+
+  @override
+  State<_LogoHubButton> createState() => _LogoHubButtonState();
+}
+
+class _LogoHubButtonState extends State<_LogoHubButton> {
+  bool _down = false;
+
+  void _open() {
+    Haptics.tap();
+    showConnectivitySheet(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Connection hub',
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (_) => setState(() => _down = false),
+        onTap: _open,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedScale(
+          scale: _down ? 0.94 : 1,
+          duration: const Duration(milliseconds: 110),
+          child: AuthLogoBadge(size: 44, pressed: _down),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Notification bell with badge ──────────────────────────────────────
 
 class _NotificationBell extends StatefulWidget {
@@ -1165,10 +1208,7 @@ class _FocalWithAlertRailState extends State<_FocalWithAlertRail> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Column(
                   children: [
-                    ConnectivityBadge(
-                      deviceId: widget.deviceId,
-                      deviceName: widget.name,
-                    ),
+                    ConnectivityBadge(deviceId: widget.deviceId),
                     if (_leakActive) ...[
                       const SizedBox(height: 12),
                       _LeakBadge(onTap: _openSheet),

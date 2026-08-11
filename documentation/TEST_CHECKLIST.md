@@ -168,6 +168,12 @@ The mode banner is gone; its whole job moved to the rail badge + sheet.
       with "needs Bluetooth" until BLE is up, then opens provisioning.
 - [ ] Clock-lost and owner-locked banners still render as before (only
       the mode banner was replaced).
+- [ ] **Logo hub (D):** the app-bar logo presses in (momentary inset +
+      light haptic) and opens the same sheet from any tab; auth-screen
+      logo unchanged (still not a button).
+- [ ] **Hub device list (2+ devices):** rows select with the radio +
+      detent haptic; the status card and dashboard follow the switch
+      live; single-device installs show no list.
 
 ## 12. Core system scenarios
 
