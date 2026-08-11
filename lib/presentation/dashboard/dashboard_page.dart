@@ -19,6 +19,7 @@ import '../auth/widgets/neu_auth_widgets.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_page.dart';
 import '../shared/feedback/app_snack.dart';
+import '../shared/feedback/haptics.dart';
 import '../settings/settings_tab.dart';
 import '../shared/widgets/geyser_focal_card.dart';
 import '../shared/widgets/neu/neu.dart';
@@ -448,9 +449,11 @@ class _SingleDeviceHome extends StatelessWidget {
                 label: 'Save',
                 primary: true,
                 onPressed: () {
+                  Haptics.commit();
                   cubit.setTimers(timers);
                   Navigator.pop(ctx);
                   // Page context, not ctx — the dialog just popped.
+                  Haptics.success();
                   showAppSnack(context,
                       type: AppSnackType.success, message: 'Timers saved');
                 },
@@ -695,6 +698,7 @@ class _SingleDeviceHome extends StatelessWidget {
               label: 'Save',
               primary: true,
               onPressed: () async {
+                Haptics.commit();
                 if (timeMode) {
                   // Remember the temperature-mode limits, then park the
                   // ceiling at its max + auto-reheat off and lean on the
@@ -723,6 +727,7 @@ class _SingleDeviceHome extends StatelessWidget {
                 // Page context — survives the pop; guarded because of the
                 // await above.
                 if (context.mounted) {
+                  Haptics.success();
                   showAppSnack(context,
                       type: AppSnackType.success,
                       message: timeMode
@@ -1131,9 +1136,11 @@ class _FocalWithAlertRailState extends State<_FocalWithAlertRail> {
     // surface the nudge + let the badge draw the eye. Turning OFF (or
     // acting once already overridden/on) always passes straight through.
     if (_leakActive && !widget.snapshot.isOn) {
+      Haptics.blocked();
       setState(() => _showNudge = true);
       return;
     }
+    Haptics.commit();
     context.read<GeyserControlCubit>().toggleGeyser();
   }
 
@@ -1227,7 +1234,10 @@ class _LeakBadgeState extends State<_LeakBadge>
       button: true,
       label: 'Water leak detected, critical. Tap for details.',
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          Haptics.tap();
+          widget.onTap();
+        },
         behavior: HitTestBehavior.opaque,
         child: AnimatedBuilder(
           animation: _pulse,
@@ -1396,6 +1406,8 @@ Future<void> showLeakDetailSheet(
                     Expanded(
                       child: _LeakOverrideButton(
                         onPressed: () {
+                          // The deliberate, informed override — a commit.
+                          Haptics.commit();
                           Navigator.of(sheetContext).pop();
                           onOverride();
                         },
@@ -2011,7 +2023,10 @@ class _PeriodSegmented extends StatelessWidget {
         children: List.generate(labels.length, (i) {
           final active = i == index;
           return GestureDetector(
-            onTap: () => onChanged(i),
+            onTap: () {
+              if (!active) Haptics.select();
+              onChanged(i);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               padding:
@@ -2069,14 +2084,20 @@ class _HeatModeToggle extends StatelessWidget {
               child: _segment(
                 'Heat to a temperature',
                 active: !timeMode,
-                onTap: () => onChanged(false),
+                onTap: () {
+                  if (timeMode) Haptics.select();
+                  onChanged(false);
+                },
               ),
             ),
             Expanded(
               child: _segment(
                 'Heat for a time',
                 active: timeMode,
-                onTap: () => onChanged(true),
+                onTap: () {
+                  if (!timeMode) Haptics.select();
+                  onChanged(true);
+                },
               ),
             ),
           ],

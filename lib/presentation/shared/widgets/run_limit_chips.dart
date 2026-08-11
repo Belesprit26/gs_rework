@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../feedback/haptics.dart';
 
 /// Whole-hour run-limit presets, shared by the Settings tab and the
 /// temperature dialog. Firmware ≥ 0.7.0 suppresses a timer that would
@@ -47,7 +48,11 @@ class RunLimitChips extends StatelessWidget {
           label: p.label,
           selected: p.minutes == currentMinutes,
           recommended: p.minutes == runLimitRecommendedMinutes,
-          onTap: () => onSelect(p.minutes),
+          onTap: () {
+            // Detent only when the selection actually changes.
+            if (p.minutes != currentMinutes) Haptics.select();
+            onSelect(p.minutes);
+          },
         );
       }).toList(),
     );

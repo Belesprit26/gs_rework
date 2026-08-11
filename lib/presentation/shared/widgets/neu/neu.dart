@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../feedback/haptics.dart';
 
 /// Neomorphic ("soft UI") primitives, scoped to the dashboard focal card.
 ///
@@ -198,7 +199,13 @@ class NeuSwitch extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1 : 0.3,
       child: GestureDetector(
-        onTap: enabled ? () => onChanged!(!value) : null,
+        // A switch tap is always a change → selection detent.
+        onTap: enabled
+            ? () {
+                Haptics.select();
+                onChanged!(!value);
+              }
+            : null,
         child: SizedBox(
           width: width,
           height: height,

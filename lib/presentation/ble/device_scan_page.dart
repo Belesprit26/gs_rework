@@ -6,6 +6,7 @@ import '../../domain/ble/ble_connection_status.dart';
 import '../../domain/ble/entities/scanned_device.dart';
 import '../notifications/notification_priming_sheet.dart';
 import '../provisioning/provisioning_sheet.dart';
+import '../shared/feedback/haptics.dart';
 import 'ble_connection_cubit.dart';
 
 /// Full-screen page that scans for GeyserSwitch devices and lets
@@ -31,6 +32,8 @@ class DeviceScanPage extends StatelessWidget {
             !prev.isConnected &&
             curr.isConnected,
         listener: (context, state) async {
+          // The connection the user was watching just landed.
+          Haptics.success();
           // Show the provisioning modal on first connection.
           final provisioned = await showProvisioningSheet(context);
           if (!context.mounted) return;
@@ -224,9 +227,12 @@ class DeviceScanPage extends StatelessWidget {
                           return _DeviceTile(
                             device: device,
                             isBusy: state.isBusy,
-                            onTap: () => context
-                                .read<BleConnectionCubit>()
-                                .connectToDevice(device),
+                            onTap: () {
+                              Haptics.tap();
+                              context
+                                  .read<BleConnectionCubit>()
+                                  .connectToDevice(device);
+                            },
                           );
                         },
                       ),

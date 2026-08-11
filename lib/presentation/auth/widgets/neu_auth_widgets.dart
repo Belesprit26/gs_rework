@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../shared/feedback/haptics.dart';
 import '../../shared/widgets/neu/neu.dart';
 import '../../theme/app_colors.dart';
 
@@ -95,7 +96,11 @@ class AuthModeWell extends StatelessWidget {
             Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => onSelected(i),
+                onTap: () {
+                  // Detent only on an actual lane change.
+                  if (i != activeIndex) Haptics.select();
+                  onSelected(i);
+                },
                 child: SizedBox(
                   height: 44,
                   child: i == activeIndex

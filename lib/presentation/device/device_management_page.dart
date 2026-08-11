@@ -8,6 +8,7 @@ import '../../domain/ble/ble_connection_status.dart';
 import '../ble/ble_connection_cubit.dart';
 import '../ble/device_scan_page.dart';
 import '../shared/feedback/app_snack.dart';
+import '../shared/feedback/haptics.dart';
 import 'device_registry_cubit.dart';
 
 /// Lists all registered GeyserSwitch devices with rename/remove
@@ -260,11 +261,13 @@ class _DeviceCard extends StatelessWidget {
   ) {
     final name = controller.text.trim();
     if (name.isEmpty) return;
+    Haptics.commit();
     // Capture before the pop unmounts the dialog's context.
     final messenger = ScaffoldMessenger.of(ctx);
     prefs.setDeviceNickname(device.rtdbDeviceId, name);
     registry.updateNickname(device.rtdbDeviceId, name);
     Navigator.pop(ctx);
+    Haptics.success();
     messenger.showSnackBar(appSnackBar(
       type: AppSnackType.success,
       message: 'Device renamed',
@@ -324,8 +327,14 @@ class _DeviceCard extends StatelessWidget {
           ),
           FilledButton(
             onPressed: () async {
+              Haptics.commit();
               Navigator.pop(ctx);
               final ok = await ownerAuth.rotateKey(device.rtdbDeviceId);
+              if (ok) {
+                Haptics.success();
+              } else {
+                Haptics.blocked();
+              }
               // Messenger was captured before the async gap; success and
               // failure now carry distinct severities.
               messenger.showSnackBar(appSnackBar(

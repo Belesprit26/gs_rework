@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../feedback/haptics.dart';
 import 'neu.dart';
 
 /// A single destination in [NeuBottomNav].
@@ -66,7 +67,11 @@ class NeuBottomNav extends StatelessWidget {
                     item: items[i],
                     selected: i == selectedIndex,
                     accent: accent,
-                    onTap: () => onSelected(i),
+                    onTap: () {
+                      // Detent only on an actual tab change.
+                      if (i != selectedIndex) Haptics.select();
+                      onSelected(i);
+                    },
                   ),
                 ),
             ],

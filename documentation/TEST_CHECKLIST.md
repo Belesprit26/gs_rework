@@ -125,7 +125,29 @@ Firebase deploy or a test-publish first.
       push lands on the **`geyser_leak_alerts`** max-importance channel with the
       app closed. `(deploy)`
 
-## 10. Core system scenarios
+## 10. App — feedback & haptics (UX polish A + B)
+
+Real phone required — the simulator has no haptic engine.
+
+- [ ] **Offline toggle:** with the device unplugged/offline, toggle the
+      geyser remotely → **amber warning** snack ("Couldn't reach the geyser…"),
+      NOT a red toast; toggle reverts.
+- [ ] Snack styling: white card, left accent bar + icon in the severity
+      colour, floats above the bottom nav; a new snack replaces the current
+      one (no queue).
+- [ ] Save confirmations: timers / temperature / heat-for-a-time / geyser
+      setup / alert prefs / rename each show a 2 s teal "…saved" snack.
+- [ ] Key reset: success = teal snack, failure = red snack (previously
+      identical).
+- [ ] Haptics — feel-check on device: power toggle = firm knock; leak-gated
+      toggle = heavy thud; chips/segments/switches/tabs = light detent (and
+      **only when the selection changes** — re-tapping the active one is
+      silent); Saves = knock then tick; provisioning complete = double-tick,
+      failure = thud.
+- [ ] System setting respected: disable haptics in OS settings → app goes
+      quiet without errors.
+
+## 11. Core system scenarios
 
 - [ ] Run the 19-scenario field-validation matrix in
       `MVP_STABILIZATION_PLAN.md` §8 (provisioning, scheduling, sensor-fail,

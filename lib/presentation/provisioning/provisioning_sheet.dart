@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../di/locator.dart';
 import '../../domain/provisioning/provisioning_status.dart';
+import '../shared/feedback/haptics.dart';
 import '../shared/widgets/app_text_field.dart';
 import 'provisioning_cubit.dart';
 
@@ -36,7 +37,24 @@ class _ProvisioningSheetBody extends StatelessWidget {
       maxChildSize: 0.92,
       expand: false,
       builder: (context, scrollController) {
-        return BlocBuilder<ProvisioningCubit, ProvisioningState>(
+        return BlocConsumer<ProvisioningCubit, ProvisioningState>(
+          // Milestone haptics for a flow the user is actively watching:
+          // a quiet tick as WiFi comes up, the success double-tick or the
+          // blocked thud when the run resolves.
+          listenWhen: (prev, curr) =>
+              prev.step != curr.step ||
+              prev.deviceStatus != curr.deviceStatus,
+          listener: (context, state) {
+            if (state.step == ProvisioningStep.result) {
+              if (state.isSuccess) {
+                Haptics.success();
+              } else {
+                Haptics.blocked();
+              }
+            } else if (state.deviceStatus == ProvisioningStatus.wifiOk) {
+              Haptics.tap();
+            }
+          },
           builder: (context, state) {
             return Padding(
               padding: EdgeInsets.only(
@@ -176,7 +194,10 @@ class _ConfigureViewState extends State<_ConfigureView> {
               label: 'WiFi',
               isActive: state.wifiEnabled,
               activeColor: Colors.green,
-              onTap: () => cubit.toggleWifi(),
+              onTap: () {
+                Haptics.select();
+                cubit.toggleWifi();
+              },
             ),
           ],
         ),
@@ -273,7 +294,10 @@ class _ConfigureViewState extends State<_ConfigureView> {
           height: 52,
           child: FilledButton(
             onPressed: state.canSubmit
-                ? () => cubit.submit()
+                ? () {
+                    Haptics.commit();
+                    cubit.submit();
+                  }
                 : null,
             child: Text(state.isAlreadyProvisioned
                 ? 'Update Configuration'

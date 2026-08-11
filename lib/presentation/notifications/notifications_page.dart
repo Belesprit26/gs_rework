@@ -7,6 +7,7 @@ import '../../data/local/prefs_manager.dart';
 import '../../domain/notifications/entities/device_notification.dart';
 import '../../domain/notifications/repositories/notification_repository.dart';
 import '../device/device_registry_cubit.dart';
+import '../shared/feedback/haptics.dart';
 
 /// Full-page view for browsing device notifications.
 ///
@@ -163,7 +164,10 @@ class _FilterChip extends StatelessWidget {
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      onSelected: (_) => onTap(),
+      onSelected: (_) {
+        if (!selected) Haptics.select();
+        onTap();
+      },
       showCheckmark: false,
       labelStyle: TextStyle(
         fontSize: 13,

@@ -20,6 +20,7 @@ import '../geyser/geyser_control_cubit.dart';
 import '../notifications/notification_priming_sheet.dart';
 import '../notifications/notification_service.dart';
 import '../shared/feedback/app_snack.dart';
+import '../shared/feedback/haptics.dart';
 import '../shared/widgets/run_limit_chips.dart';
 import '../stats/device_stats_cubit.dart';
 import '../theme/app_colors.dart';
@@ -354,6 +355,7 @@ class _ThisGeyserSection extends StatelessWidget {
                   ),
                   title: Text(regState.devices[i].nickname),
                   onTap: () {
+                    if (i != regState.selectedIndex) Haptics.select();
                     registry.selectDevice(i);
                     Navigator.pop(sheetCtx);
                   },
@@ -567,6 +569,7 @@ class _GeyserSetupRow extends StatelessWidget {
               ),
               FilledButton(
                 onPressed: () async {
+                  Haptics.commit();
                   final parsed = double.tryParse(rateController.text);
                   if (parsed != null && parsed > 0) {
                     config = config.copyWith(costPerKwh: parsed);
@@ -577,6 +580,7 @@ class _GeyserSetupRow extends StatelessWidget {
                     await configRepo.saveConfig(deviceId, config);
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
+                  Haptics.success();
                   messenger.showSnackBar(appSnackBar(
                     type: AppSnackType.success,
                     message: 'Geyser setup saved',
@@ -800,6 +804,7 @@ class _NotificationSettingsRow extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () async {
+                Haptics.commit();
                 // Captured before the awaits/pop invalidate ctx.
                 final messenger = ScaffoldMessenger.of(ctx);
                 for (final entry in toggles.entries) {
@@ -810,6 +815,7 @@ class _NotificationSettingsRow extends StatelessWidget {
                 }
                 getIt<NotificationService>().refreshUnreadCount();
                 if (ctx.mounted) Navigator.pop(ctx);
+                Haptics.success();
                 messenger.showSnackBar(appSnackBar(
                   type: AppSnackType.success,
                   message: 'Alert preferences saved',
