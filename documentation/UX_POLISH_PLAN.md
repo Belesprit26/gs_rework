@@ -288,13 +288,11 @@ Phase-E acceptance: no `Colors.*.shade*` literals left in
   hub actions, logo press-state), plus a re-run of §core provisioning after
   Phase E.
 
-## Open decisions (need a call before the relevant phase)
+## Decisions (confirmed 2026-08-11)
 
-1. **Rail stacking** — connectivity pinned top with hazards beneath
-   (recommended: stable anchor) vs hazards on top.
-2. **Logo tap target** — connection hub sheet (recommended) vs navigating
-   straight to `DeviceScanPage`.
-3. **Success snacks for every save** — recommended "Saved" confirmations
-   are new noise; alternatively rely on haptic `success` only and keep the
-   UI silent. (Recommendation: snack + haptic for dialog saves, haptic-only
-   for inline chip/switch changes.)
+1. **Rail stacking** — connectivity pinned **top**, hazards stack beneath.
+   Stable anchor; hazard pulse still draws the eye.
+2. **Logo tap** — opens the **connection hub sheet** (same sheet as the
+   rail badge — one surface, two entrances).
+3. **Save feedback** — dialog saves get a "Saved" snack + `success` haptic;
+   inline chip/switch changes get the haptic tick only.
