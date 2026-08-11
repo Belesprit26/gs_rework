@@ -252,7 +252,50 @@ the existing Settings → Devices path.
 
 ---
 
-## Phase E — Provisioning & scan surfaces in the neu language
+## Phase E — expanded scope (decisions confirmed 2026-08-11)
+
+Phase E is no longer styling-only. It is split:
+
+**E1 — restyle + hardware-contract parity audit.** The visual work below,
+plus a written parity table verifying every app↔firmware contract surface
+code-to-code: GATT UUIDs + characteristic byte layouts, provisioning
+status codes (firmware defines 0–6 incl. `PROV_BLE_ONLY_OK=6`), nickname
+16 **bytes vs characters** (firmware `PROV_NICKNAME_MAX 16`), SSID/
+password limits vs firmware buffers + MTU chunking, timer payloads, temp
+clamps, maxon range, event codes 0x01–0x0A, RTDB key contract, scan
+filter, and every prov-cubit error/timeout/retry path. Anything
+mismatched gets fixed on the app side (firmware is frozen until bench).
+
+**E2 — sensors page + energy seam + first-run.** New per-device
+**"Sensors" card** in Settings → THIS GEYSER ("What's installed on this
+unit"):
+
+- **Flags in RTDB `set/$did`** as compact keys (`cs` current, `ls` leak)
+  — cross-phone sync, rules-validated, and firmware can start reading
+  them next cycle with zero migration (`apply_partial` ignores unknown
+  keys — verified). No temp key: temp is locked ON.
+- **Defaults:** current NO · leak NO · temp ON (locked, shown as
+  "included"; dynamic sensor-fail handling remains the authority for a
+  broken probe).
+- **Leak flag is app-side for now** — units without a probe read dry
+  forever (GPIO22 pull-up), so phantom cuts aren't live; firmware gates
+  `leak.c` off the flag in the next firmware cycle. An arriving
+  `EVT_LEAK` is **never suppressed** app-side regardless of the flag.
+- **Current = yes** stores the flag + shows "measured readings arrive
+  with a firmware update"; all calculations flow through a new
+  `EnergySource` seam (estimates impl today = existing Tier-1 model
+  unchanged; measured impl slots in when the firmware lands).
+- **Prov hand-off:** the provisioning success screen gains a light,
+  skippable "Set up your sensors" link.
+- **First-run:** zero registered devices → the focal-card area becomes a
+  "Pair your GeyserSwitch" CTA card (opens the hub), the rail badge is
+  hidden (no device = no state), and the app-bar logo **breathes a teal
+  halo** (the connecting-badge grammar) until the first device registers
+  — returning if the last device is ever removed.
+- Rules deploy: `database.rules.json` gains boolean validation for
+  `cs`/`ls` (deploy alongside E2).
+
+## Phase E1 — Provisioning & scan surfaces in the neu language
 
 Widget-layer restyle only; `ProvisioningCubit`, `BleConnectionCubit`, and
 repositories are not touched. Every interactive element picks up Phase A/B
