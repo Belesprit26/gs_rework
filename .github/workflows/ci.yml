@@ -12,8 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned deliberately. An unpinned `channel: stable` follows whatever
+      # Flutter ships, so CI silently drifted to 3.47.0 while releases are
+      # built on 3.38.9 — and 3.47 raised the minimum Gradle to 8.14.0, which
+      # this project's wrapper (8.10.2) does not meet. A green tick has to
+      # mean "the toolchain we actually ship with is healthy". Bump this in
+      # lockstep with the local SDK, alongside the Gradle/AGP upgrade.
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.38.9
           channel: stable
           cache: true
 
