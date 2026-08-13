@@ -75,6 +75,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -116,3 +117,35 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Launcher icons — regenerate with: dart run flutter_launcher_icons
+#
+# Source is the 1024x1024 square lockup from the shipped GeyserSwitch app
+# (the same mark the App Store listing carries). It lives outside the
+# declared `assets:` list on purpose: it is build-time input, not something
+# to ship in the bundle.
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+
+  # iOS. The source PNG carries an alpha channel and App Store Connect
+  # rejects app icons that do; flatten it onto the mark's own white ground.
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
+
+  # Android. minSdk is 25, so legacy mipmaps are still generated for API 25
+  # while API 26+ gets adaptive icons. The wordmark spans nearly the full
+  # square, so the foreground is inset to clear the launcher's circular
+  # mask instead of having "Geyser"/"Switch" clipped at the edges.
+  #
+  # Inset measured by compositing the layers, not guessed. Android applies it
+  # at render time (mipmap-anydpi-v26/ic_launcher.xml), so the generated PNG
+  # is identical at every value -- measuring the PNG alone tells you nothing.
+  # On the 432px canvas the circular mask leaves a 144px radius; the mark's
+  # furthest ink lands at 123px here (85%), inside even the stricter 66dp
+  # guidance. Larger insets shrink it needlessly; smaller ones crowd the mask.
+  android: true
+  min_sdk_android: 25
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  adaptive_icon_foreground_inset: 15
