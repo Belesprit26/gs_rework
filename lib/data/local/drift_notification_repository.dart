@@ -59,13 +59,14 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
-  Future<int> countAllUndismissed({
+  Future<int> countAllUnread({
     Set<NotificationType>? enabledTypes,
   }) async {
     final countExpr = _db.notificationEntries.id.count();
     final query = _db.selectOnly(_db.notificationEntries)
       ..addColumns([countExpr])
-      ..where(_db.notificationEntries.dismissed.equals(false));
+      ..where(_db.notificationEntries.read.equals(false) &
+          _db.notificationEntries.dismissed.equals(false));
 
     if (enabledTypes != null && enabledTypes.isNotEmpty) {
       query.where(
@@ -154,6 +155,15 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 
   @override
+  Future<void> markAllRead() async {
+    await (_db.update(_db.notificationEntries)
+          ..where((t) => t.read.equals(false)))
+        .write(const NotificationEntriesCompanion(
+      read: Value(true),
+    ));
+  }
+
+  @override
   Future<void> markSynced(List<int> ids) async {
     if (ids.isEmpty) return;
     await (_db.update(_db.notificationEntries)
@@ -194,6 +204,7 @@ class DriftNotificationRepository implements NotificationRepository {
       temperature: n.temperature,
       timestamp: n.timestamp,
       dismissed: Value(n.dismissed),
+      read: Value(n.read),
       synced: Value(n.synced),
       source: Value(n.source == NotificationSource.remote ? 'remote' : 'ble'),
     );
@@ -207,6 +218,7 @@ class DriftNotificationRepository implements NotificationRepository {
       temperature: e.temperature,
       timestamp: e.timestamp,
       dismissed: e.dismissed,
+      read: e.read,
       synced: e.synced,
       source:
           e.source == 'remote' ? NotificationSource.remote : NotificationSource.ble,

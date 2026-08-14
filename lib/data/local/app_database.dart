@@ -23,7 +23,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -34,6 +34,16 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 3) {
             await m.addColumn(notificationEntries, notificationEntries.source);
+          }
+          if (from < 4) {
+            await m.addColumn(notificationEntries, notificationEntries.read);
+            // Backfill existing rows as read. They predate the column, so
+            // the user has had every chance to see them — leaving them at
+            // the `false` default would greet an upgrading user with a
+            // badge counting weeks of already-handled events.
+            await (update(notificationEntries)
+                  ..where((t) => t.read.equals(false)))
+                .write(const NotificationEntriesCompanion(read: Value(true)));
           }
         },
       );

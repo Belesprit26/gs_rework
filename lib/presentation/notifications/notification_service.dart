@@ -120,7 +120,7 @@ class NotificationService {
   /// no longer depends on a device being BLE-connected (the old
   /// per-`_rtdbDeviceId` count read zero whenever nothing was paired).
   Future<void> refreshUnreadCount() async {
-    final count = await _notifications.countAllUndismissed(
+    final count = await _notifications.countAllUnread(
       enabledTypes: _prefs.enabledNotificationTypes,
     );
     _lastUnreadCount = count;

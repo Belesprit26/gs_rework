@@ -77,6 +77,7 @@ class DeviceNotification extends Equatable {
     required this.temperature,
     required this.timestamp,
     this.dismissed = false,
+    this.read = false,
     this.synced = false,
     this.source = NotificationSource.ble,
   });
@@ -99,6 +100,10 @@ class DeviceNotification extends Equatable {
   /// Whether the user has dismissed this from the notifications list.
   /// Dismissed notifications are still stored and synced.
   final bool dismissed;
+
+  /// Whether the user has seen this in the notifications list.
+  /// Independent of [dismissed] — seeing and clearing are separate acts.
+  final bool read;
 
   /// Whether this record has been pushed to cloud storage.
   final bool synced;
@@ -143,6 +148,7 @@ class DeviceNotification extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, deviceId, type, temperature, timestamp, dismissed, synced, source,
+        id, deviceId, type, temperature, timestamp, dismissed, read, synced,
+        source,
       ];
 }

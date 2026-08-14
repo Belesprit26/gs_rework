@@ -396,6 +396,13 @@ exports.sendNotification = onCall(async (request) => {
       },
     },
     apns: {
+      // `badge: 1` is a marker, not a count, and is deliberately not
+      // derived from anything. APNs has no server-side increment, and a
+      // real count is unavailable here regardless: read/dismissed state
+      // lives only in the on-device database and is never synced up. So
+      // the icon badge means "something arrived while you were away", and
+      // AppDelegate.applicationDidBecomeActive clears it on open. Setting
+      // it to a computed number would only make it wrong more precisely.
       headers: { "apns-priority": "10" },
       payload: { aps: { alert: { title, body }, sound: "default", badge: 1 } },
     },
@@ -516,6 +523,7 @@ exports.sendNotificationFromESP32 = onRequest(
           },
         },
         apns: {
+          // Marker, not a count — see the note on the other send path.
           headers: { "apns-priority": "10" },
           payload: {
             aps: { alert: { title, body }, sound: "default", badge: 1 },

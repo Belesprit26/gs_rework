@@ -20,7 +20,20 @@ class NotificationEntries extends Table {
   DateTimeColumn get timestamp => dateTime()();
 
   /// Whether the user has dismissed this notification from the UI.
+  ///
+  /// Distinct from [read]: dismissing removes a row from the list,
+  /// reading only means the user has seen it. The bell badge counts
+  /// unread-and-undismissed, so neither action alone leaves a count
+  /// stranded with nothing on screen to clear it.
   BoolColumn get dismissed =>
+      boolean().withDefault(const Constant(false))();
+
+  /// Whether the user has seen this notification in the list.
+  ///
+  /// Backfills to `true` for pre-existing rows in the v4 migration:
+  /// they predate the concept, and defaulting them unread would spike
+  /// the badge on upgrade with events the user has long since handled.
+  BoolColumn get read =>
       boolean().withDefault(const Constant(false))();
 
   /// Whether this record has been pushed to cloud storage.

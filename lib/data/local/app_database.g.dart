@@ -253,7 +253,8 @@ class TelemetryEntry extends DataClass implements Insertable<TelemetryEntry> {
   /// Water temperature in °C (stored as real).
   final double temperature;
 
-  /// Whether the geyser element was on (0 = off, 1 = on).
+  /// Whether the relay was closed — mains supplied to the geyser
+  /// (0 = off, 1 = on).
   final bool isOn;
 
   /// Min temp limit at time of reading.
@@ -602,6 +603,19 @@ class $NotificationEntriesTable extends NotificationEntries
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _readMeta = const VerificationMeta('read');
+  @override
+  late final GeneratedColumn<bool> read = GeneratedColumn<bool>(
+    'read',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("read" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
   @override
   late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
@@ -633,6 +647,7 @@ class $NotificationEntriesTable extends NotificationEntries
     temperature,
     timestamp,
     dismissed,
+    read,
     synced,
     source,
   ];
@@ -692,6 +707,12 @@ class $NotificationEntriesTable extends NotificationEntries
         dismissed.isAcceptableOrUnknown(data['dismissed']!, _dismissedMeta),
       );
     }
+    if (data.containsKey('read')) {
+      context.handle(
+        _readMeta,
+        read.isAcceptableOrUnknown(data['read']!, _readMeta),
+      );
+    }
     if (data.containsKey('synced')) {
       context.handle(
         _syncedMeta,
@@ -743,6 +764,11 @@ class $NotificationEntriesTable extends NotificationEntries
             DriftSqlType.bool,
             data['${effectivePrefix}dismissed'],
           )!,
+      read:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.bool,
+            data['${effectivePrefix}read'],
+          )!,
       synced:
           attachedDatabase.typeMapping.read(
             DriftSqlType.bool,
@@ -780,7 +806,19 @@ class NotificationEntry extends DataClass
   final DateTime timestamp;
 
   /// Whether the user has dismissed this notification from the UI.
+  ///
+  /// Distinct from [read]: dismissing removes a row from the list,
+  /// reading only means the user has seen it. The bell badge counts
+  /// unread-and-undismissed, so neither action alone leaves a count
+  /// stranded with nothing on screen to clear it.
   final bool dismissed;
+
+  /// Whether the user has seen this notification in the list.
+  ///
+  /// Backfills to `true` for pre-existing rows in the v4 migration:
+  /// they predate the concept, and defaulting them unread would spike
+  /// the badge on upgrade with events the user has long since handled.
+  final bool read;
 
   /// Whether this record has been pushed to cloud storage.
   final bool synced;
@@ -794,6 +832,7 @@ class NotificationEntry extends DataClass
     required this.temperature,
     required this.timestamp,
     required this.dismissed,
+    required this.read,
     required this.synced,
     required this.source,
   });
@@ -806,6 +845,7 @@ class NotificationEntry extends DataClass
     map['temperature'] = Variable<int>(temperature);
     map['timestamp'] = Variable<DateTime>(timestamp);
     map['dismissed'] = Variable<bool>(dismissed);
+    map['read'] = Variable<bool>(read);
     map['synced'] = Variable<bool>(synced);
     map['source'] = Variable<String>(source);
     return map;
@@ -819,6 +859,7 @@ class NotificationEntry extends DataClass
       temperature: Value(temperature),
       timestamp: Value(timestamp),
       dismissed: Value(dismissed),
+      read: Value(read),
       synced: Value(synced),
       source: Value(source),
     );
@@ -836,6 +877,7 @@ class NotificationEntry extends DataClass
       temperature: serializer.fromJson<int>(json['temperature']),
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
       dismissed: serializer.fromJson<bool>(json['dismissed']),
+      read: serializer.fromJson<bool>(json['read']),
       synced: serializer.fromJson<bool>(json['synced']),
       source: serializer.fromJson<String>(json['source']),
     );
@@ -850,6 +892,7 @@ class NotificationEntry extends DataClass
       'temperature': serializer.toJson<int>(temperature),
       'timestamp': serializer.toJson<DateTime>(timestamp),
       'dismissed': serializer.toJson<bool>(dismissed),
+      'read': serializer.toJson<bool>(read),
       'synced': serializer.toJson<bool>(synced),
       'source': serializer.toJson<String>(source),
     };
@@ -862,6 +905,7 @@ class NotificationEntry extends DataClass
     int? temperature,
     DateTime? timestamp,
     bool? dismissed,
+    bool? read,
     bool? synced,
     String? source,
   }) => NotificationEntry(
@@ -871,6 +915,7 @@ class NotificationEntry extends DataClass
     temperature: temperature ?? this.temperature,
     timestamp: timestamp ?? this.timestamp,
     dismissed: dismissed ?? this.dismissed,
+    read: read ?? this.read,
     synced: synced ?? this.synced,
     source: source ?? this.source,
   );
@@ -883,6 +928,7 @@ class NotificationEntry extends DataClass
           data.temperature.present ? data.temperature.value : this.temperature,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
       dismissed: data.dismissed.present ? data.dismissed.value : this.dismissed,
+      read: data.read.present ? data.read.value : this.read,
       synced: data.synced.present ? data.synced.value : this.synced,
       source: data.source.present ? data.source.value : this.source,
     );
@@ -897,6 +943,7 @@ class NotificationEntry extends DataClass
           ..write('temperature: $temperature, ')
           ..write('timestamp: $timestamp, ')
           ..write('dismissed: $dismissed, ')
+          ..write('read: $read, ')
           ..write('synced: $synced, ')
           ..write('source: $source')
           ..write(')'))
@@ -911,6 +958,7 @@ class NotificationEntry extends DataClass
     temperature,
     timestamp,
     dismissed,
+    read,
     synced,
     source,
   );
@@ -924,6 +972,7 @@ class NotificationEntry extends DataClass
           other.temperature == this.temperature &&
           other.timestamp == this.timestamp &&
           other.dismissed == this.dismissed &&
+          other.read == this.read &&
           other.synced == this.synced &&
           other.source == this.source);
 }
@@ -935,6 +984,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
   final Value<int> temperature;
   final Value<DateTime> timestamp;
   final Value<bool> dismissed;
+  final Value<bool> read;
   final Value<bool> synced;
   final Value<String> source;
   const NotificationEntriesCompanion({
@@ -944,6 +994,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     this.temperature = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.dismissed = const Value.absent(),
+    this.read = const Value.absent(),
     this.synced = const Value.absent(),
     this.source = const Value.absent(),
   });
@@ -954,6 +1005,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     required int temperature,
     required DateTime timestamp,
     this.dismissed = const Value.absent(),
+    this.read = const Value.absent(),
     this.synced = const Value.absent(),
     this.source = const Value.absent(),
   }) : deviceId = Value(deviceId),
@@ -967,6 +1019,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     Expression<int>? temperature,
     Expression<DateTime>? timestamp,
     Expression<bool>? dismissed,
+    Expression<bool>? read,
     Expression<bool>? synced,
     Expression<String>? source,
   }) {
@@ -977,6 +1030,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
       if (temperature != null) 'temperature': temperature,
       if (timestamp != null) 'timestamp': timestamp,
       if (dismissed != null) 'dismissed': dismissed,
+      if (read != null) 'read': read,
       if (synced != null) 'synced': synced,
       if (source != null) 'source': source,
     });
@@ -989,6 +1043,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     Value<int>? temperature,
     Value<DateTime>? timestamp,
     Value<bool>? dismissed,
+    Value<bool>? read,
     Value<bool>? synced,
     Value<String>? source,
   }) {
@@ -999,6 +1054,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
       temperature: temperature ?? this.temperature,
       timestamp: timestamp ?? this.timestamp,
       dismissed: dismissed ?? this.dismissed,
+      read: read ?? this.read,
       synced: synced ?? this.synced,
       source: source ?? this.source,
     );
@@ -1025,6 +1081,9 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
     if (dismissed.present) {
       map['dismissed'] = Variable<bool>(dismissed.value);
     }
+    if (read.present) {
+      map['read'] = Variable<bool>(read.value);
+    }
     if (synced.present) {
       map['synced'] = Variable<bool>(synced.value);
     }
@@ -1043,6 +1102,7 @@ class NotificationEntriesCompanion extends UpdateCompanion<NotificationEntry> {
           ..write('temperature: $temperature, ')
           ..write('timestamp: $timestamp, ')
           ..write('dismissed: $dismissed, ')
+          ..write('read: $read, ')
           ..write('synced: $synced, ')
           ..write('source: $source')
           ..write(')'))
@@ -1349,6 +1409,7 @@ typedef $$NotificationEntriesTableCreateCompanionBuilder =
       required int temperature,
       required DateTime timestamp,
       Value<bool> dismissed,
+      Value<bool> read,
       Value<bool> synced,
       Value<String> source,
     });
@@ -1360,6 +1421,7 @@ typedef $$NotificationEntriesTableUpdateCompanionBuilder =
       Value<int> temperature,
       Value<DateTime> timestamp,
       Value<bool> dismissed,
+      Value<bool> read,
       Value<bool> synced,
       Value<String> source,
     });
@@ -1400,6 +1462,11 @@ class $$NotificationEntriesTableFilterComposer
 
   ColumnFilters<bool> get dismissed => $composableBuilder(
     column: $table.dismissed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get read => $composableBuilder(
+    column: $table.read,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1453,6 +1520,11 @@ class $$NotificationEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get read => $composableBuilder(
+    column: $table.read,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get synced => $composableBuilder(
     column: $table.synced,
     builder: (column) => ColumnOrderings(column),
@@ -1492,6 +1564,9 @@ class $$NotificationEntriesTableAnnotationComposer
 
   GeneratedColumn<bool> get dismissed =>
       $composableBuilder(column: $table.dismissed, builder: (column) => column);
+
+  GeneratedColumn<bool> get read =>
+      $composableBuilder(column: $table.read, builder: (column) => column);
 
   GeneratedColumn<bool> get synced =>
       $composableBuilder(column: $table.synced, builder: (column) => column);
@@ -1552,6 +1627,7 @@ class $$NotificationEntriesTableTableManager
                 Value<int> temperature = const Value.absent(),
                 Value<DateTime> timestamp = const Value.absent(),
                 Value<bool> dismissed = const Value.absent(),
+                Value<bool> read = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
                 Value<String> source = const Value.absent(),
               }) => NotificationEntriesCompanion(
@@ -1561,6 +1637,7 @@ class $$NotificationEntriesTableTableManager
                 temperature: temperature,
                 timestamp: timestamp,
                 dismissed: dismissed,
+                read: read,
                 synced: synced,
                 source: source,
               ),
@@ -1572,6 +1649,7 @@ class $$NotificationEntriesTableTableManager
                 required int temperature,
                 required DateTime timestamp,
                 Value<bool> dismissed = const Value.absent(),
+                Value<bool> read = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
                 Value<String> source = const Value.absent(),
               }) => NotificationEntriesCompanion.insert(
@@ -1581,6 +1659,7 @@ class $$NotificationEntriesTableTableManager
                 temperature: temperature,
                 timestamp: timestamp,
                 dismissed: dismissed,
+                read: read,
                 synced: synced,
                 source: source,
               ),

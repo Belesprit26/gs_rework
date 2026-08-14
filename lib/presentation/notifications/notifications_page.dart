@@ -46,6 +46,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
     // Pooled across all devices — not scoped to the connected one.
     final items = await _repo.getAllUndismissed();
     if (mounted) setState(() { _notifications = items; _loading = false; });
+
+    // Opening the list is what "reading" means, so mark on load rather
+    // than on dispose: anything arriving while the page is open stays
+    // unread and correctly re-badges the bell on the way out.
+    await _repo.markAllRead();
   }
 
   /// Distinct device ids present, most-recently-active first (the list

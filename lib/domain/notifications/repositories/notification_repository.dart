@@ -22,7 +22,17 @@ abstract class NotificationRepository {
 
   /// Pooled unread count across every device, for the app-bar badge,
   /// filtered to [enabledTypes].
-  Future<int> countAllUndismissed({Set<NotificationType>? enabledTypes});
+  ///
+  /// Counts rows that are neither read nor dismissed. Both conditions are
+  /// needed: counting only unread would strand the badge above an empty
+  /// list when a user dismisses without opening, and counting only
+  /// undismissed is what made the badge unclearable — viewing the list
+  /// left it untouched, so it only ever went down by swiping each row.
+  Future<int> countAllUnread({Set<NotificationType>? enabledTypes});
+
+  /// Mark every stored notification as read. Called when the user opens
+  /// the notifications list — that is the act of seeing them.
+  Future<void> markAllRead();
 
   /// Whether [deviceId] has an unresolved water leak: its most recent
   /// [NotificationType.leak] is not yet followed by a
