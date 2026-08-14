@@ -202,6 +202,7 @@
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				8C758E86BC5ED50E2E7F1C8D /* [CP] Embed Pods Frameworks */,
 				9118348D3B2D7A7FF01EB28C /* [CP] Copy Pods Resources */,
+				7D3E9A15C0B84F26D8E1A039 /* Upload Crashlytics dSYMs */,
 			);
 			buildRules = (
 			);
@@ -273,6 +274,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		7D3E9A15C0B84F26D8E1A039 /* Upload Crashlytics dSYMs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Upload Crashlytics dSYMs";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Sends debug symbols to Crashlytics so release crashes are symbolicated.\n# The pod's `run` validates synchronously then uploads in the background, so this\n# adds no measurable build time.\n#\n# Debug is skipped because DEBUG_INFORMATION_FORMAT is \"dwarf\" there and no dSYM exists.\n#\n# The explicit DWARF_DSYM_FOLDER_PATH argument is deliberate. Plain --build-phase mode\n# resolves to Runner.app.dSYM alone, which would leave every Dart frame unsymbolicated\n# because Flutter app code lives in App.framework. Passing the folder picks that up too.\nif [ \"$CONFIGURATION\" = \"Debug\" ]; then\n  echo \"note: Crashlytics dSYM upload skipped for Debug (no dSYM is generated)\"\n  exit 0\nfi\n\"${PODS_ROOT}/FirebaseCrashlytics/run\" -gsp \"${SRCROOT}/Runner/GoogleService-Info.plist\" -- \"${DWARF_DSYM_FOLDER_PATH}\"\n";
+		};
 		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
