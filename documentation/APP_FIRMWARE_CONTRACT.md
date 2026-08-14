@@ -71,6 +71,29 @@ App writes ↔ `firebase_rtdb.c apply_partial` (also full-object `is_put`):
 what makes E2's `cs`/`ls` sensor flags a zero-migration addition. Rules
 (`database.rules.json`) mirror the same ranges (max ≤ 70 deployed).
 
+**Which node the app writes matters, and only for `on`.** RTDB streams an
+`update()` on the parent as `event: patch`, `path: "/"`, and a `set()` on a
+child as `path: "/<key>"`. The firmware dispatches on that path
+(`firebase_rtdb.c:503`): `"/"` → `apply_full_settings(data, is_put)`,
+anything else → `apply_partial`. Inside `apply_full_settings` the relay key
+*alone* sits behind `if (is_put)` (`:362`), so a patch carrying `on` is
+silently dropped while `min`/`max`/`ar`/`tmask`/`tcust`/`maxon` apply
+normally — they sit outside the guard and read absent keys from current
+device state, so partial patches don't clobber.
+
+- **Relay → write the leaf `set/$did/on` via `set()`.** Reaches
+  `apply_partial("/on")`, which does the full job: relay, NVS, GATT notify,
+  `live` push. This is the only correct form on fielded firmware.
+- **Everything else → `update()` on `set/$did` is fine**, single or batched.
+
+Field-tested 2026-08-13: the app was writing the parent for the relay, so
+the WiFi toggle never reached the device while every other setting did.
+Fixed app-side (`firebase_rtdb_repository.dart toggleRelay`) — no reflash.
+The firmware asymmetry remains: the `is_put` guard arrived in bulk commit
+`e1ce54f` with no recorded rationale and is a trap for the next writer.
+Removing it is the honest fix, but it needs every fielded unit reflashed
+before the app could rely on it.
+
 ## Event codes
 
 0x01 maxTempOff · 0x02 minTempOn · 0x03 minTempAlert · 0x04 sensorFail ·

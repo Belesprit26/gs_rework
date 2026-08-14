@@ -87,10 +87,18 @@ class FirebaseRtdbRepository implements RtdbRepository {
     //    futures never complete while the phone is offline — without a
     //    timeout this await (and the caller's isBusy spinner) hangs
     //    indefinitely in a dead zone.
+    //
+    //    Write the leaf, not the parent. An update() on `set/$deviceId`
+    //    reaches the device as `event: patch` at path "/", and the
+    //    firmware only reads the relay key out of a *put* at that path
+    //    (apply_full_settings, gated on is_put) — so the toggle was
+    //    silently dropped while every other setting applied. Setting the
+    //    leaf arrives as path "/on", which apply_partial() handles
+    //    correctly: relay, NVS, GATT notify and the live push.
     try {
       await _userRef()
-          .child('set/$deviceId')
-          .update({'on': desiredState})
+          .child('set/$deviceId/on')
+          .set(desiredState)
           .timeout(const Duration(seconds: 10));
     } on TimeoutException {
       return false;
