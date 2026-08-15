@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../../core/ble/gatt_uuids.dart';
@@ -35,6 +37,10 @@ class FlutterBluePlusBleRepository implements BleRepository {
   int _reconnectAttempt = 0;
   static const int _maxReconnectAttempt = 6; // max ~32s delay
   static const _scanTimeout = Duration(seconds: 12);
+
+  /// Firmware advertises `GeyserSwitch`, `GeyserSwitch-Setup` or
+  /// `GeyserSwitch-<nickname>`, and sets the same string as its GAP name.
+  static const _namePrefix = 'GeyserSwitch';
 
   // ── Connection state ──────────────────────────────────────────────
 
@@ -74,23 +80,45 @@ class FlutterBluePlusBleRepository implements BleRepository {
 
     final controller = StreamController<List<ScannedDevice>>();
 
+    // Two sources, because scanning alone cannot see everything. A device
+    // the OS is already connected to has stopped advertising, so it is
+    // absent from every scan result — see [_systemConnectedDevices].
+    var advertised = <ScannedDevice>[];
+    var connected = <ScannedDevice>[];
+
+    void emitMerged() {
+      if (controller.isClosed) return;
+      controller.add(mergeDiscovered(
+        advertised: advertised,
+        connected: connected,
+      ));
+    }
+
+    // Seed from the platform's connected list before the first
+    // advertisement arrives, so a silent device appears immediately
+    // rather than after the scan times out with nothing.
+    _systemConnectedDevices().then((devices) {
+      if (devices.isEmpty) return;
+      connected = devices;
+      emitMerged();
+    });
+
     // Map the platform's scan results, filtering to GeyserSwitch* devices.
     // Scan without service UUID filter — some adapters don't report service
     // UUIDs in advertisements. We filter by name prefix in the stream.
     final resultsSub = FlutterBluePlus.scanResults.map((results) {
       return results
-          .where((r) =>
-              r.advertisementData.advName.startsWith('GeyserSwitch'))
+          .where((r) => r.advertisementData.advName.startsWith(_namePrefix))
           .map((r) => ScannedDevice(
                 id: r.device.remoteId.str,
                 name: r.advertisementData.advName,
                 rssi: r.rssi,
               ))
-          .toList()
-        ..sort((a, b) => b.rssi.compareTo(a.rssi)); // strongest first
+          .toList();
     }).listen(
       (devices) {
-        if (!controller.isClosed) controller.add(devices);
+        advertised = devices;
+        emitMerged();
       },
       onError: (Object e) {
         if (!controller.isClosed) controller.addError(e);
@@ -136,6 +164,68 @@ class FlutterBluePlusBleRepository implements BleRepository {
     };
 
     return controller.stream;
+  }
+
+  /// Combine advertised and already-connected devices into one list.
+  ///
+  /// Pure so the ordering rules can be tested without the platform: the
+  /// live path around it is entirely FlutterBluePlus statics.
+  ///
+  /// An id present in both wins as the advertised entry, because that one
+  /// carries a signal reading measured this session.
+  @visibleForTesting
+  static List<ScannedDevice> mergeDiscovered({
+    required List<ScannedDevice> advertised,
+    required List<ScannedDevice> connected,
+  }) {
+    final byId = <String, ScannedDevice>{
+      for (final d in connected) d.id: d,
+      for (final d in advertised) d.id: d,
+    };
+    return byId.values.toList()
+      ..sort((a, b) {
+        // Already-connected first: actionable, and with no signal reading
+        // there is nothing to rank them by against the rest.
+        if (a.isConnected != b.isConnected) return a.isConnected ? -1 : 1;
+        return (b.rssi ?? -128).compareTo(a.rssi ?? -128); // strongest first
+      });
+  }
+
+  /// GeyserSwitch devices the OS already holds a connection to.
+  ///
+  /// These are invisible to scanning, and not because of any filtering:
+  /// the firmware does not restart advertising after a successful connect
+  /// (`ble_init.c` only re-advertises on disconnect or a failed connect),
+  /// so a connected unit is radio-silent. On iOS this bites hardest,
+  /// because CoreBluetooth connections belong to the system daemon rather
+  /// than the app process and therefore outlive an app relaunch — leaving
+  /// a provisioned device that the user can neither see nor reach.
+  ///
+  /// Enrichment only: a failure here must never break the scan.
+  Future<List<ScannedDevice>> _systemConnectedDevices() async {
+    try {
+      final devices = await FlutterBluePlus.systemDevices([GattUuids.service]);
+
+      // `withServices` is honoured on iOS (required there, for privacy)
+      // but IGNORED on Android, where this returns every connected
+      // device — headphones, watches, car kits. The firmware sets its GAP
+      // name to the same GeyserSwitch* string it advertises, so the name
+      // prefix does the narrowing there. On iOS the service filter is
+      // authoritative and the name is not required to be cached.
+      final ours = Platform.isAndroid
+          ? devices.where((d) => d.platformName.startsWith(_namePrefix))
+          : devices;
+
+      return ours
+          .map((d) => ScannedDevice(
+                id: d.remoteId.str,
+                name: d.platformName.isEmpty ? _namePrefix : d.platformName,
+                isConnected: true,
+              ))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// After a scan ends (naturally or on failure), restore the real

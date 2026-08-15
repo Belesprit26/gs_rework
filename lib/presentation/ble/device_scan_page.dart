@@ -460,9 +460,11 @@ class _DeviceTile extends StatelessWidget {
 
   /// 0–4 bars from RSSI, matching the old text buckets.
   int get _bars {
-    if (device.rssi >= -50) return 4; // Excellent
-    if (device.rssi >= -65) return 3; // Good
-    if (device.rssi >= -80) return 2; // Fair
+    final rssi = device.rssi;
+    if (rssi == null) return 0; // never heard over the air
+    if (rssi >= -50) return 4; // Excellent
+    if (rssi >= -65) return 3; // Good
+    if (rssi >= -80) return 2; // Fair
     return 1; // Weak
   }
 
@@ -513,7 +515,13 @@ class _DeviceTile extends StatelessWidget {
                   ],
                 ),
               ),
-              _SignalDots(bars: _bars),
+              // A device from the OS's connected list has no signal
+              // reading — it was never heard over the air. Say so rather
+              // than draw an empty meter that reads as "no signal".
+              if (device.isConnected)
+                const _ConnectedChip()
+              else
+                _SignalDots(bars: _bars),
               const SizedBox(width: 8),
               if (isBusy)
                 const SizedBox(
@@ -533,6 +541,34 @@ class _DeviceTile extends StatelessWidget {
 }
 
 /// Four ascending signal bars; lit count = strength.
+/// Shown in place of the signal meter for a device the OS is already
+/// connected to. Such a device has stopped advertising, so there is no
+/// RSSI to show — and an empty meter would read as "no signal" when the
+/// truth is the opposite: it is the closest thing to hand.
+class _ConnectedChip extends StatelessWidget {
+  const _ConnectedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.neuBase,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: neuRaisedShadows(distance: 1.5, blur: 4),
+      ),
+      child: const Text(
+        'Connected',
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
 class _SignalDots extends StatelessWidget {
   const _SignalDots({required this.bars});
 

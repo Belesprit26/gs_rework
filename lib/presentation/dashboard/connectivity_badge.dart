@@ -81,6 +81,100 @@ ConnectivityStatus connectivityStatusFrom(
   }
 }
 
+/// How one transport is doing, for the hub's per-transport rows.
+///
+/// The combined [ConnectivityStatus] answers "am I in contact"; this
+/// answers "why not, and which half is at fault" — the question a user
+/// actually has when a command doesn't land.
+enum TransportState {
+  /// Carrying commands right now.
+  active,
+
+  /// Usable, but not the path in use.
+  standby,
+
+  /// Cannot carry a command, for the reason given alongside.
+  down,
+}
+
+/// A transport's state paired with a reason a person can act on.
+class TransportStatus {
+  const TransportStatus(this.state, this.detail);
+
+  final TransportState state;
+
+  /// Always concrete — never "unavailable". If it is down, this says what
+  /// would fix it; a reason the user cannot act on is not worth showing.
+  final String detail;
+}
+
+/// Pure mapper — Bluetooth's side of the story.
+TransportStatus bluetoothTransportStatus(
+  GeyserControlState g,
+  BleConnectionState b,
+) {
+  if (g.mode == GeyserMode.ble) {
+    return const TransportStatus(
+      TransportState.active,
+      'carrying commands now',
+    );
+  }
+
+  final isConnecting = g.bleStatus == BleConnectionStatus.connecting ||
+      g.bleStatus == BleConnectionStatus.discoveringServices ||
+      g.bleStatus == BleConnectionStatus.reconnecting;
+  if (isConnecting) {
+    return const TransportStatus(TransportState.standby, 'connecting…');
+  }
+  if (!b.isBluetoothOn) {
+    return const TransportStatus(
+      TransportState.down,
+      'turn Bluetooth on in Settings',
+    );
+  }
+  if (!b.isPaired) {
+    return const TransportStatus(
+      TransportState.down,
+      'no device paired yet — use Pair a device',
+    );
+  }
+  // Paired, radio on, still not connected: out of range is the ordinary
+  // explanation, and the honest one — we cannot distinguish it from a
+  // device that is powered down.
+  return const TransportStatus(
+    TransportState.down,
+    'device not in range, or powered off',
+  );
+}
+
+/// Pure mapper — WiFi's side of the story.
+TransportStatus wifiTransportStatus(
+  GeyserControlState g,
+  BleConnectionState b,
+) {
+  if (g.mode == GeyserMode.remote && !g.deviceOffline) {
+    return const TransportStatus(
+      TransportState.active,
+      'carrying commands now',
+    );
+  }
+  if (!b.isWifiProvisioned) {
+    return const TransportStatus(
+      TransportState.down,
+      'device has no WiFi set up — use Configure WiFi',
+    );
+  }
+  if (g.deviceOffline) {
+    return const TransportStatus(
+      TransportState.down,
+      'device has not reported in recently',
+    );
+  }
+  // Provisioned and reporting, just not the active path — which happens
+  // whenever Bluetooth wins, since it is preferred when present.
+  return const TransportStatus(TransportState.standby, 'ready if needed');
+}
+
 /// Compact downtime for the badge caption: "now", "4m", "2h", "3d".
 String compactAgo(Duration d) {
   if (d.inMinutes < 1) return 'now';
@@ -504,6 +598,25 @@ class _ConnectivitySheetBody extends StatelessWidget {
               const SizedBox(height: 4),
             ],
 
+            // ── Per-transport detail ────────────────────────────────
+            // Bluetooth is preferred whenever it is present, so the app
+            // can look "stuck on the wrong one" when it is simply using
+            // the better path. Showing both, each with its own reason,
+            // is what makes that legible.
+            const SizedBox(height: 12),
+            _TransportRow(
+              icon: Icons.bluetooth_rounded,
+              label: 'Bluetooth',
+              status: bluetoothTransportStatus(gState, bState),
+            ),
+            const SizedBox(height: 7),
+            _TransportRow(
+              icon: Icons.wifi_rounded,
+              label: 'WiFi',
+              status: wifiTransportStatus(gState, bState),
+            ),
+            const SizedBox(height: 4),
+
             // ── Actions ─────────────────────────────────────────────
             if (canReconnect)
               _SheetAction(
@@ -547,6 +660,67 @@ class _ConnectivitySheetBody extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One transport's live state and the reason behind it.
+class _TransportRow extends StatelessWidget {
+  const _TransportRow({
+    required this.icon,
+    required this.label,
+    required this.status,
+  });
+
+  final IconData icon;
+  final String label;
+  final TransportStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color dot, Color labelColor) = switch (status.state) {
+      TransportState.active => (AppColors.save, AppColors.ink),
+      TransportState.standby => (
+          AppColors.inkSecondary.withValues(alpha: 0.5),
+          AppColors.ink,
+        ),
+      TransportState.down => (
+          AppColors.rampOrange,
+          AppColors.inkSecondary,
+        ),
+    };
+
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: labelColor.withValues(alpha: 0.7)),
+        const SizedBox(width: 9),
+        SizedBox(
+          width: 66,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: labelColor,
+            ),
+          ),
+        ),
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            status.detail,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.inkSecondary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
