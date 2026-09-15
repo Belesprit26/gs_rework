@@ -123,6 +123,7 @@ class DeviceManagementPage extends StatelessWidget {
                           bottom: index < regState.devices.length - 1 ? 8 : 0),
                       child: _DeviceCard(
                         device: device,
+                        index: index,
                         isSelected: isSelected,
                         isConnected: isConnected,
                         isBusy: isBusy,
@@ -142,12 +143,14 @@ class DeviceManagementPage extends StatelessWidget {
 class _DeviceCard extends StatelessWidget {
   const _DeviceCard({
     required this.device,
+    required this.index,
     required this.isSelected,
     required this.isConnected,
     required this.isBusy,
   });
 
   final DeviceInfo device;
+  final int index;
   final bool isSelected;
   final bool isConnected;
   final bool isBusy;
@@ -177,6 +180,12 @@ class _DeviceCard extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
+        onTap: isSelected
+            ? null
+            : () {
+                context.read<DeviceRegistryCubit>().selectDevice(index);
+                Haptics.select();
+              },
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: _buildStatusIcon(cs),
@@ -349,6 +358,7 @@ class _DeviceCard extends StatelessWidget {
 
   void _showRemoveConfirmation(BuildContext context) {
     final registry = context.read<DeviceRegistryCubit>();
+    final bleCubit = context.read<BleConnectionCubit>();
 
     showDialog<void>(
       context: context,
@@ -365,9 +375,15 @@ class _DeviceCard extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              registry.removeDevice(device.rtdbDeviceId);
-              Navigator.pop(ctx);
+            onPressed: () async {
+              // If this device is the currently paired BLE peripheral,
+              // disconnect and clear the pairing so the app doesn't
+              // auto-reconnect to a device the user explicitly removed.
+              if (bleCubit.state.pairedDeviceId == device.bleMac) {
+                await bleCubit.unpair();
+              }
+              await registry.removeDevice(device.rtdbDeviceId);
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(ctx).colorScheme.error,

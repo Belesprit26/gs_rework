@@ -278,13 +278,20 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
         if (storedId != null && storedId.isNotEmpty) {
           await _prefs.setRtdbDeviceId(bleMac, storedId);
           debugPrint('[BLE] Recovered device ID from ESP: $bleMac → "$storedId"');
-        } else {
-          // Firmware without 0x0C — derive the ID from the BLE
-          // identifier, same as provisioning does. Unlike a shared
-          // fallback ID, this stays unique per device.
+        } else if (provStatus == ProvisioningStatus.complete ||
+                   provStatus == ProvisioningStatus.wifiOk) {
+          // Genuinely provisioned device with older firmware that
+          // predates the 0x0C characteristic — derive an ID from the
+          // BLE identifier so it stays unique per device.
           final derived = deriveDeviceId(bleMac);
           await _prefs.setRtdbDeviceId(bleMac, derived);
-          debugPrint('[BLE] No stored ID on ESP — derived $bleMac → "$derived"');
+          debugPrint('[BLE] Provisioned but no 0x0C — derived $bleMac → "$derived"');
+        } else {
+          // Device is unprovisioned (factory-reset or first-time
+          // setup) and has no stored ID — don't create a mapping.
+          // The provisioning flow will assign one once the user
+          // completes setup.
+          debugPrint('[BLE] Unprovisioned device — skipping ID mapping');
         }
       }
 
@@ -292,7 +299,9 @@ class BleConnectionCubit extends Cubit<BleConnectionState>
       // multi-device PageView stays current without needing an app restart.
       String? rtdbId;
       if (bleMac != null) {
-        rtdbId = _prefs.getRtdbDeviceId(bleMac)!;
+        rtdbId = _prefs.getRtdbDeviceId(bleMac);
+      }
+      if (rtdbId != null && bleMac != null) {
         final nick = (nickname != null && nickname.isNotEmpty)
             ? nickname
             : 'My Geyser';

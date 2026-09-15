@@ -34,7 +34,7 @@ import '../../domain/geyser/timer_presets.dart';
 /// Contains a [Scaffold] with:
 /// - An app bar (with BLE status chip + sign-out)
 /// - Padded body content with a single focal card + stat tiles
-/// - A bottom navigation bar (Devices tab opens BLE scan)
+/// - A bottom navigation bar (Home, Usage, Settings)
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
