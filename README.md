@@ -13,6 +13,23 @@ The device switches the geyser at the **mains**, upstream of the geyser's
 own mechanical thermostat — it is an energy/scheduling controller, not a
 safety device. See `documentation/MVP_STABILIZATION_PLAN.md` §0.
 
+## ⚠️ Licence — this is not open source
+
+The source is published so people can read it and try it out. That is the
+whole of the permission granted.
+
+**You may** read the code, and build and run it privately to evaluate it.
+
+**You may not** use it commercially, redistribute it in source or compiled
+form, publish a build to any app store, offer it as a service, distribute
+modified versions, or use it as machine-learning training data.
+
+[LICENSE](LICENSE) governs; the summary above is not a substitute for
+reading it. Section 5 covers safety and liability — this app controls
+mains electricity, and nothing here is certified against any electrical
+safety standard. Not accepting contributions: see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Running
 
 ```bash
